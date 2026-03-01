@@ -1,0 +1,17 @@
+{
+  "name": "rinbotdiscord36",
+  "version": "1.0.0",
+  "description": "Discord bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^17.2.1",
+    "noblox.js": "^4.15.0"
+  }
+}
