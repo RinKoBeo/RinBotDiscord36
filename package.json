@@ -1,4 +1,14 @@
 {
+  "1": null,
+  "2": null,
+  "3": null,
+  "4": null,
+  "5": null,
+  "6": null,
+  "7": null,
+  "8": null,
+  "9": null,
+  "10": null,
   "name": "rinbotdiscord36",
   "version": "1.0.0",
   "description": "Discord bot verify roblox",
@@ -8,10 +18,12 @@
   },
   "author": "rin",
   "license": "ISC",
-  "engines": {
-    "node": ">=18"
+ "engines": {
+  "node": "20.x"
+
   },
   "dependencies": {
+    "cheerio": "^1.0.0-rc.12",
     "discord.js": "^14.15.3",
     "dotenv": "^17.2.1",
     "noblox.js": "^4.15.1"
