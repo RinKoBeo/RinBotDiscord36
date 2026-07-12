@@ -196,7 +196,7 @@ client.on("messageCreate", async (message) => {
   const now = Date.now();
 
   // 1. AUTO CHAT KHI BỊ TAG PING
-  const pingUserIds = ["1487337137601773720", "895208486743457793"];
+  const pingUserIds = ["1517437552213098529", "895208486743457793"];
   const isPinged = pingUserIds.some(id => message.content.includes(`<@${id}>`) || message.content.includes(`<@!${id}>`));
 
   if (isPinged) {
@@ -647,6 +647,7 @@ require("./music.js")(client);
 require("./logger.js")(client);
 require("./warn.js")(client);
 require("./taophong.js")(client);
+require("./wellcome.js")(client);
 
 // ĐĂNG NHẬP BOT
 client.login(TOKEN);
