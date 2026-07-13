@@ -5,36 +5,29 @@ const { EmbedBuilder, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInpu
 module.exports = (client) => {
     client.on("messageCreate", async (message) => {
         try {
-            // Bỏ qua tin nhắn bot, không guild
             if (message.author.bot || !message.guild) return;
-            
-            // Kiểm tra lệnh !clear
             if (!message.content.startsWith("!clear")) return;
 
             console.log(`📝 [CLEAR] ${message.author.tag} đã gõ lệnh !clear`);
 
-            // Kiểm tra quyền người dùng
+            // Kiểm tra quyền
             if (!message.member.permissions.has("ManageMessages")) {
                 return message.reply({ 
                     content: "❌ Mày cần quyền **Quản lý tin nhắn** để dùng lệnh này!",
-                    ephemeral: true 
                 });
             }
 
-            // Kiểm tra quyền bot
             if (!message.guild.members.me.permissions.has("ManageMessages")) {
                 return message.reply({ 
                     content: "❌ Bot cần quyền **Quản lý tin nhắn** để xóa!",
-                    ephemeral: true 
                 });
             }
 
             // === TẠO MODAL ===
             const modal = new ModalBuilder()
-                .setCustomId('clearModal')
+                .setCustomId(`clearModal_${message.id}`) // 👈 THÊM UNIQUE ID
                 .setTitle('🗑️ XÓA TIN NHẮN');
 
-            // Ô nhập số lượng
             const amountInput = new TextInputBuilder()
                 .setCustomId('amountInput')
                 .setLabel('Nhập số lượng tin nhắn cần xóa (1-100)')
@@ -44,7 +37,6 @@ module.exports = (client) => {
                 .setMinLength(1)
                 .setMaxLength(3);
 
-            // Ô nhập ngày
             const dayInput = new TextInputBuilder()
                 .setCustomId('dayInput')
                 .setLabel('Số ngày cũ nhất (để trống = 61 ngày)')
@@ -57,27 +49,37 @@ module.exports = (client) => {
             const row2 = new ActionRowBuilder().addComponents(dayInput);
             modal.addComponents(row1, row2);
 
-            // === HIỂN THỊ MODAL ===
+            // === HIỂN THỊ MODAL (CÓ TRY-CATCH CHI TIẾT) ===
             try {
                 await message.showModal(modal);
                 console.log(`✅ [CLEAR] Đã hiện Modal cho ${message.author.tag}`);
             } catch (modalError) {
                 console.error("❌ Lỗi hiện Modal:", modalError);
+                
+                // 👇 XỬ LÝ LỖI CHI TIẾT HƠN
+                let errorMsg = "❌ Không thể hiện bảng nhập! ";
+                if (modalError.code === 50035) {
+                    errorMsg += "Lỗi cấu trúc Modal (kiểm tra lại các trường nhập).";
+                } else if (modalError.code === 40060) {
+                    errorMsg += "Interaction đã được trả lời rồi!";
+                } else {
+                    errorMsg += `Lỗi: ${modalError.message}`;
+                }
+                
                 return message.reply({ 
-                    content: "❌ Không thể hiện bảng nhập! Thử lại sau.",
-                    ephemeral: true 
+                    content: errorMsg,
                 });
             }
 
             // === XỬ LÝ KHI NGƯỜI DÙNG GỬI MODAL ===
             const filter = (interaction) => 
-                interaction.customId === 'clearModal' && 
+                interaction.customId === `clearModal_${message.id}` && 
                 interaction.user.id === message.author.id;
 
             try {
                 const interaction = await message.awaitModalSubmit({ 
                     filter, 
-                    time: 120000 // 2 phút
+                    time: 120000
                 });
 
                 console.log(`📥 [CLEAR] Nhận dữ liệu từ Modal của ${message.author.tag}`);
@@ -167,10 +169,12 @@ module.exports = (client) => {
                 if (error.code === 'InteractionCollectorError') {
                     await message.reply({ 
                         content: "⏰ Hết thời gian chờ! Thử lại `!clear` nhé.",
-                        ephemeral: true 
                     });
                 } else {
                     console.error("❌ Lỗi Modal:", error);
+                    await message.reply({ 
+                        content: `❌ Lỗi xử lý: ${error.message}`,
+                    });
                 }
             }
 
