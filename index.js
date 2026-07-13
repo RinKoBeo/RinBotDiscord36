@@ -648,6 +648,6 @@ require("./logger.js")(client);
 require("./warn.js")(client);
 require("./taophong.js")(client);
 require("./wellcome.js")(client); // WELCOME & GOODBYE
-
+require("./clear.js")(client);
 // ĐĂNG NHẬP BOT
 client.login(TOKEN);
