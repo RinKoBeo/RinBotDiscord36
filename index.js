@@ -57,14 +57,15 @@ let logs = {};
 let joinLogs = {};
 let msgLogs = {}; 
 
-// ===== KHỞI TẠO CLIENT BOT =====
+// ===== KHỞI TẠO CLIENT BOT (ĐÃ THÊM GUILD MEMBERS INTENT) =====
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,      
     GatewayIntentBits.GuildVoiceStates,     
-    GatewayIntentBits.GuildModeration,      
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildMembers,  // ← THÊM INTENT NÀY CHO WELCOME/GODBYE
   ],
   partials: [
     Partials.Message, 
@@ -186,7 +187,6 @@ function check(guild, userId, type) {
 // 🔥 SỰ KIỆN TIN NHẮN (GOM ĐẦY ĐỦ LOGIC MOD GỐC + SETTOP MỚI + AI)
 // ========================================================
 const VIOLATION_FILE = 'violators.json';
-// Thêm từ N-word vào danh sách quét từ cấm (pedo đã có sẵn)
 const bannedWords = ["pedo", "cp", "loli", "shota" , "hentai", "18+", "nsfw", "sex" , "owner ấm dâu", "bú lồn", "đụ","đĩ", "lồn mẹ mày", "thèm chịch", "chịch", "thèm nắc" , "muốn ma thuý", "ma thuý", "thèm thuốc", "thuốc", "đâm vào lồn", "đâm vào mông", "đâm vào đít", "đâm vào vếu", "đâm vào ngực", "đâm vào bướm", "đâm vào cu", "đâm vào chim", "đâm vào dương vật", "đâm vào cặc", "đâm vào chịch", "đâm vào thằng nào đó", "thằng nào đó đâm vào đít", "thằng nào đó đâm vào lồn", "nungws" , "nungws qua", "them bu lon", "bu cac", " muon dit tre em" , "thèm trẻ em", "djt tre em", "ma tuy", "nigger", "nigga", "niga"]; 
 
 client.on("messageCreate", async (message) => {
@@ -647,7 +647,7 @@ require("./music.js")(client);
 require("./logger.js")(client);
 require("./warn.js")(client);
 require("./taophong.js")(client);
-require("./wellcome.js")(client);
+require("./wellcome.js")(client); // WELCOME & GOODBYE
 
 // ĐĂNG NHẬP BOT
 client.login(TOKEN);
