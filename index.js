@@ -523,11 +523,34 @@ client.on("guildMemberAdd", (member) => {
   if (joinLogs[member.guild.id].length >= 5) lockServer(member.guild).catch(() => {});
 });
 
+// ======================================================
+// ✅ ĐOẠN ĐÃ SỬA - CHO PHÉP OWNER THÊM BOT KHÔNG BỊ KICK
+// ======================================================
 client.on("guildMemberAdd", async (member) => {
+  // Nếu là bot và không trong WHITELIST
   if (member.user.bot && !WHITELIST.includes(member.id)) {
+    try {
+      // Lấy audit log để xem ai đã thêm bot này
+      const fetchedLogs = await member.guild.fetchAuditLogs({
+        limit: 1,
+        type: 28 // 28 = Bot Add
+      });
+      const botAddLog = fetchedLogs.entries.first();
+      
+      // Nếu người thêm bot là Owner server => cho phép
+      if (botAddLog && botAddLog.executor.id === member.guild.ownerId) {
+        console.log(`✅ Bot ${member.user.tag} được Owner thêm vào, bỏ qua kick.`);
+        return; // không kick
+      }
+    } catch (err) {
+      console.error("❌ Lỗi fetch audit log khi thêm bot:", err.message);
+    }
+    
+    // Nếu không phải Owner thêm => kick
     await member.ban({ reason: "Bot lạ nhập cư trái phép" }).catch(() => {});
   }
 });
+// ========== KẾT THÚC ĐOẠN SỬA ==========
 
 // ===== SLASH COMMAND VERIFY =====
 client.on("interactionCreate", async interaction => {
