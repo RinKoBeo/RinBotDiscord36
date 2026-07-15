@@ -1,4 +1,4 @@
-// ticket.js - Hệ thống ticket tự động bằng nút bấm (export function)
+// ticket.js - Hệ thống ticket tự động bằng nút bấm (viền trắng, fix close, thêm nút xóa)
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -37,7 +37,6 @@ function getTicketCount(userId, data) {
 // ===== HÀM GỬI PANEL =====
 async function sendTicketPanel(client) {
   try {
-    // Lấy server đầu tiên bot ở (hoặc có thể lấy theo ID server cụ thể)
     const guild = client.guilds.cache.first();
     if (!guild) {
       console.error('❌ Bot chưa tham gia server nào! Không thể gửi panel.');
@@ -60,12 +59,12 @@ async function sendTicketPanel(client) {
     const embed = new EmbedBuilder()
       .setTitle('🎫 TẠO TICKET')
       .setDescription(
-        '📌 **Hướng dẫn:**\n' +
-        '• Bấm nút **"🎫 Tạo ticket"** bên dưới để tạo một ticket mới.\n' +
+        ' **Hướng dẫn:**\n' +
+        '• Bấm nút **" Tạo ticket"** bên dưới để tạo một ticket mới.\n' +
         '• Mỗi người chỉ được tạo tối đa **2 ticket** đang mở.\n' +
         '• Admin sẽ xem xét và hỗ trợ bạn trong kênh ticket được tạo.'
       )
-      .setColor(0x00ffcc)
+      .setColor(0xffffff) // 👈 Đổi màu viền thành trắng
       .setTimestamp();
 
     const row = new ActionRowBuilder()
@@ -83,11 +82,8 @@ async function sendTicketPanel(client) {
   }
 }
 
-// ===== HÀM XỬ LÝ INTERACTION =====
-async function handleInteraction(interaction, db, saveDb) {
-  if (!interaction.isButton()) return;
-  if (interaction.customId !== 'ticket_create') return;
-
+// ===== HÀM XỬ LÝ TẠO TICKET =====
+async function handleCreateTicket(interaction) {
   const userId = interaction.user.id;
   const guild = interaction.guild;
 
@@ -141,14 +137,14 @@ async function handleInteraction(interaction, db, saveDb) {
     .setTitle(`🎫 Ticket #${ticketId}`)
     .setDescription(
       `👤 **Người tạo:** <@${userId}>\n` +
-      `📌 **Trạng thái:** 🟢 Đang mở\n` +
-      `⏰ **Thời gian:** <t:${Math.floor(Date.now()/1000)}:F>\n\n` +
-      `📝 **Hướng dẫn:**\n` +
+      ` **Trạng thái:** 🟢 Đang mở\n` +
+      ` **Thời gian:** <t:${Math.floor(Date.now()/1000)}:F>\n\n` +
+      ` **Hướng dẫn:**\n` +
       `• Hãy mô tả vấn đề của bạn tại đây.\n` +
       `• Admin sẽ phản hồi trong kênh này.\n` +
-      `• Khi đã xong, admin bấm nút **"🔒 Đóng ticket"** bên dưới.`
+      `• Hãy kiên nhẫn chờ Admin phản hồi.`
     )
-    .setColor(0x00ff00)
+    .setColor(0xffffff) // 👈 Đổi màu viền thành trắng
     .setTimestamp();
 
   const closeRow = new ActionRowBuilder()
@@ -171,71 +167,122 @@ async function handleInteraction(interaction, db, saveDb) {
   });
 }
 
-// ===== EXPORT FUNCTION (ĐÚNG ĐỊNH DẠNG) =====
+// ===== XÓA TICKET =====
+async function handleDeleteTicket(interaction, ticketId) {
+  const data = readData();
+  const ticket = data.tickets[ticketId];
+  if (!ticket) {
+    return interaction.reply({ content: '❌ Không tìm thấy ticket!', ephemeral: true });
+  }
+
+  const channel = interaction.guild.channels.cache.get(ticket.channelId);
+  if (channel) {
+    await channel.delete(`Ticket #${ticketId} đã bị xóa bởi ${interaction.user.tag}`).catch(() => {});
+  }
+
+  delete data.tickets[ticketId];
+  saveData(data);
+
+  await interaction.reply({
+    content: `🗑️ Đã xóa ticket #${ticketId} và kênh.`,
+    ephemeral: true
+  });
+}
+
+// ===== ĐÓNG TICKET =====
+async function handleCloseTicket(interaction, ticketId) {
+  const data = readData();
+  const ticket = data.tickets[ticketId];
+  if (!ticket) {
+    return interaction.reply({ content: '❌ Không tìm thấy ticket!', ephemeral: true });
+  }
+  if (ticket.status === 'closed') {
+    return interaction.reply({ content: '❌ Ticket đã đóng rồi!', ephemeral: true });
+  }
+
+  ticket.status = 'closed';
+  saveData(data);
+
+  const channel = interaction.guild.channels.cache.get(ticket.channelId);
+  if (channel) {
+    // Đổi tên kênh để biết đã đóng
+    await channel.setName(`closed-${channel.name}`).catch(() => {});
+
+    // Thu hồi quyền xem và gửi tin nhắn của mọi người (trừ admin và bot)
+    const overwrites = [
+      { id: interaction.guild.id, deny: ['ViewChannel', 'SendMessages'] },
+      ...ADMIN_IDS.map(id => ({
+        id: id,
+        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels']
+      })),
+      { id: interaction.client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] }
+    ];
+    await channel.permissionOverwrites.set(overwrites).catch(() => {});
+
+    // Gửi embed thông báo đã đóng
+    const embed = new EmbedBuilder()
+      .setTitle(`🎫 Ticket #${ticketId} - ĐÃ ĐÓNG`)
+      .setDescription(
+        ` Ticket đã được đóng bởi <@${interaction.user.id}>.\n` +
+        ` Kênh này đã bị khóa, không ai có thể chat thêm.\n` +
+        ` Admin có thể bấm nút **"🗑️ Xóa ticket"** bên dưới để xóa kênh.`
+      )
+      .setColor(0xffffff) // 👈 Đổi màu viền thành trắng
+      .setTimestamp();
+
+    const deleteRow = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId(`ticket_delete_${ticketId}`)
+          .setLabel('🗑️ Xóa ticket')
+          .setStyle(ButtonStyle.Danger)
+      );
+
+    await channel.send({ embeds: [embed], components: [deleteRow] });
+  }
+
+  await interaction.reply({
+    content: ` Đã đóng ticket #${ticketId}.`,
+    ephemeral: true
+  });
+}
+
+// ===== EXPORT FUNCTION =====
 module.exports = async function(client) {
-  // Đợi bot ready rồi mới gửi panel
+  // Gửi panel khi bot ready
   client.once('ready', async () => {
-    // Đợi thêm 2s để cache dữ liệu server
     setTimeout(async () => {
       await sendTicketPanel(client);
     }, 2000);
   });
 
-  // Đăng ký listener cho button ticket
+  // Xử lý tất cả button của ticket
   client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
-    if (interaction.customId !== 'ticket_create' && !interaction.customId.startsWith('ticket_close_')) return;
+    if (!interaction.customId.startsWith('ticket_')) return;
 
-    let db = {};
-    let saveDb = () => {};
-    try {
-      const econFile = path.join(__dirname, '../economy.json');
-      if (fs.existsSync(econFile)) {
-        db = JSON.parse(fs.readFileSync(econFile, 'utf8'));
-        saveDb = (data) => fs.writeFileSync(econFile, JSON.stringify(data, null, 2));
+    // Phân loại action
+    const parts = interaction.customId.split('_');
+    const action = parts[1]; // 'create', 'close', 'delete'
+    const ticketId = parseInt(parts[2]);
+
+    // Kiểm tra admin cho close và delete
+    if (action === 'close' || action === 'delete') {
+      if (!isAdmin(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Chỉ Admin mới làm việc này!', ephemeral: true });
       }
-    } catch (e) {}
-
-    if (interaction.customId === 'ticket_create') {
-      await handleInteraction(interaction, db, saveDb);
-      return;
-    }
-
-    if (interaction.customId.startsWith('ticket_close_')) {
-      const ticketId = parseInt(interaction.customId.split('_')[2]);
       if (isNaN(ticketId)) {
         return interaction.reply({ content: '❌ Lỗi ID ticket!', ephemeral: true });
       }
-      if (!isAdmin(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Chỉ Admin mới đóng ticket!', ephemeral: true });
-      }
-      const data = readData();
-      const ticket = data.tickets[ticketId];
-      if (!ticket) {
-        return interaction.reply({ content: '❌ Không tìm thấy ticket!', ephemeral: true });
-      }
-      if (ticket.status === 'closed') {
-        return interaction.reply({ content: '❌ Ticket đã đóng rồi!', ephemeral: true });
-      }
-      ticket.status = 'closed';
-      saveData(data);
+    }
 
-      const channel = interaction.guild.channels.cache.get(ticket.channelId);
-      if (channel) {
-        await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false });
-        const embed = new EmbedBuilder()
-          .setTitle(`🎫 Ticket #${ticketId} - ĐÃ ĐÓNG`)
-          .setDescription(`🔒 Ticket đã được đóng bởi <@${interaction.user.id}>.`)
-          .setColor(0x888888)
-          .setTimestamp();
-        await channel.send({ embeds: [embed] });
-      }
-
-      await interaction.reply({
-        content: `✅ Đã đóng ticket #${ticketId}.`,
-        ephemeral: true
-      });
-      return;
+    // Xử lý từng action
+    if (action === 'create') {
+      await handleCreateTicket(interaction);
+    } else if (action === 'close') {
+      await handleCloseTicket(interaction, ticketId);
+    } else if (action === 'delete') {
+      await handleDeleteTicket(interaction, ticketId);
     }
   });
 };
