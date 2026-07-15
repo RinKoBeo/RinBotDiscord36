@@ -7,9 +7,9 @@ const DATA_FILE = path.join(__dirname, '../ticket_data.json');
 
 // ===== CẤU HÌNH =====
 const TICKET_CHANNEL_ID = '1526979564872532069'; // 👈 Kênh chứa nút "Tạo ticket"
-const TICKET_CATEGORY_ID = 'YOUR_CATEGORY_ID'; // 👈 Category chứa kênh ticket (để trống nếu muốn)
+const TICKET_CATEGORY_ID = null; // 👈 Category chứa kênh ticket (null nếu không dùng)
 const PING_ROLES = ['1525869008862318693', '1525869199379923074', '1525871335354405174', '1525888140211130550']; // 👈 Các role sẽ được ping khi tạo ticket
-const ADMIN_IDS = [ '1517437552213098529'];
+const ADMIN_IDS = ['1517437552213098529'];
 
 // ===== ĐỌC/GHI DATA =====
 function readData() {
@@ -47,15 +47,18 @@ module.exports = {
   // ===== GỬI BẢNG TICKET VÀO KÊNH CHỈ ĐỊNH =====
   async sendTicketPanel(client) {
     const guild = client.guilds.cache.first();
-    if (!guild) return;
+    if (!guild) {
+      console.error('❌ Bot chưa vào server nào!');
+      return;
+    }
     const channel = guild.channels.cache.get(TICKET_CHANNEL_ID);
     if (!channel) {
       console.error('❌ Không tìm thấy kênh ticket! Kiểm tra TICKET_CHANNEL_ID.');
       return;
     }
 
-    // Xóa tin nhắn cũ nếu có (tùy chọn)
-    const messages = await channel.messages.fetch({ limit: 10 });
+    // Xóa tin nhắn cũ của bot có component
+    const messages = await channel.messages.fetch({ limit: 20 });
     for (const msg of messages.values()) {
       if (msg.author.id === client.user.id && msg.components.length > 0) {
         await msg.delete().catch(() => {});
@@ -143,7 +146,6 @@ module.exports = {
     saveData(data);
 
     // ===== NỘI DUNG TRONG KÊNH TICKET =====
-    // Ping người dùng và các role
     let pingContent = `<@${userId}>`;
     for (const roleId of PING_ROLES) {
       pingContent += ` <@&${roleId}>`;
@@ -152,10 +154,10 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setTitle(`🎫 Ticket #${ticketId}`)
       .setDescription(
-        ` **Người tạo:** <@${userId}>\n` +
-        ` **Trạng thái:** 🟢 Đang mở\n` +
-        ` **Thời gian:** <t:${Math.floor(Date.now()/1000)}:F>\n\n` +
-        ` **Hướng dẫn:**\n` +
+        `**👤 Người tạo:** <@${userId}>\n` +
+        `**📌 Trạng thái:** 🟢 Đang mở\n` +
+        `**🕒 Thời gian:** <t:${Math.floor(Date.now()/1000)}:F>\n\n` +
+        `**📝 Hướng dẫn:**\n` +
         `• Hãy mô tả vấn đề của bạn tại đây.\n` +
         `• Admin sẽ phản hồi trong kênh này.\n` +
         `• Khi đã xong, admin bấm nút **"🔒 Đóng ticket"** bên dưới.`
@@ -182,8 +184,5 @@ module.exports = {
       content: `✅ Đã tạo ticket #${ticketId}! Kiểm tra kênh <#${channel.id}>.`,
       ephemeral: true
     });
-
-    // Thông báo cho admin (tùy chọn)
-    // Có thể gửi vào kênh log nếu muốn
   }
 };
