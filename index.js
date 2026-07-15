@@ -673,5 +673,6 @@ require("./taophong.js")(client);
 require("./wellcome.js")(client); // WELCOME & GOODBYE
 require("./clear.js")(client);
 require("./ticket.js")(client);
+require("./autorole.js")(client);
 // ĐĂNG NHẬP BOT
 client.login(TOKEN);
