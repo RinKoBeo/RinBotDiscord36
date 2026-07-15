@@ -36,43 +36,51 @@ function getTicketCount(userId, data) {
 
 // ===== HÀM GỬI PANEL =====
 async function sendTicketPanel(client) {
-  const guild = client.guilds.cache.first();
-  if (!guild) return;
-  const channel = guild.channels.cache.get(TICKET_CHANNEL_ID);
-  if (!channel) {
-    console.error('❌ Không tìm thấy kênh ticket! Kiểm tra TICKET_CHANNEL_ID.');
-    return;
-  }
-
-  // Xóa tin nhắn cũ của bot có components
-  const messages = await channel.messages.fetch({ limit: 10 });
-  for (const msg of messages.values()) {
-    if (msg.author.id === client.user.id && msg.components.length > 0) {
-      await msg.delete().catch(() => {});
+  try {
+    // Lấy server đầu tiên bot ở (hoặc có thể lấy theo ID server cụ thể)
+    const guild = client.guilds.cache.first();
+    if (!guild) {
+      console.error('❌ Bot chưa tham gia server nào! Không thể gửi panel.');
+      return;
     }
+    const channel = guild.channels.cache.get(TICKET_CHANNEL_ID);
+    if (!channel) {
+      console.error(`❌ Không tìm thấy kênh ID ${TICKET_CHANNEL_ID} trong server ${guild.name}!`);
+      return;
+    }
+
+    // Xóa tin nhắn cũ của bot có components
+    const messages = await channel.messages.fetch({ limit: 10 });
+    for (const msg of messages.values()) {
+      if (msg.author.id === client.user.id && msg.components.length > 0) {
+        await msg.delete().catch(() => {});
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('🎫 TẠO TICKET')
+      .setDescription(
+        '📌 **Hướng dẫn:**\n' +
+        '• Bấm nút **"🎫 Tạo ticket"** bên dưới để tạo một ticket mới.\n' +
+        '• Mỗi người chỉ được tạo tối đa **2 ticket** đang mở.\n' +
+        '• Admin sẽ xem xét và hỗ trợ bạn trong kênh ticket được tạo.'
+      )
+      .setColor(0x00ffcc)
+      .setTimestamp();
+
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId('ticket_create')
+          .setLabel('🎫 Tạo ticket')
+          .setStyle(ButtonStyle.Primary)
+      );
+
+    await channel.send({ embeds: [embed], components: [row] });
+    console.log('✅ Đã gửi bảng ticket vào kênh:', channel.name);
+  } catch (error) {
+    console.error('❌ Lỗi gửi ticket panel:', error);
   }
-
-  const embed = new EmbedBuilder()
-    .setTitle('🎫 TẠO TICKET')
-    .setDescription(
-      '📌 **Hướng dẫn:**\n' +
-      '• Bấm nút **"🎫 Tạo ticket"** bên dưới để tạo một ticket mới.\n' +
-      '• Mỗi người chỉ được tạo tối đa **2 ticket** đang mở.\n' +
-      '• Admin sẽ xem xét và hỗ trợ bạn trong kênh ticket được tạo.'
-    )
-    .setColor(0x00ffcc)
-    .setTimestamp();
-
-  const row = new ActionRowBuilder()
-    .addComponents(
-      new ButtonBuilder()
-        .setCustomId('ticket_create')
-        .setLabel('🎫 Tạo ticket')
-        .setStyle(ButtonStyle.Primary)
-    );
-
-  await channel.send({ embeds: [embed], components: [row] });
-  console.log('✅ Đã gửi bảng ticket vào kênh:', channel.name);
 }
 
 // ===== HÀM XỬ LÝ INTERACTION =====
@@ -165,20 +173,22 @@ async function handleInteraction(interaction, db, saveDb) {
 
 // ===== EXPORT FUNCTION (ĐÚNG ĐỊNH DẠNG) =====
 module.exports = async function(client) {
-  // 1. Gửi panel ticket vào kênh chỉ định khi bot khởi động
-  await sendTicketPanel(client);
+  // Đợi bot ready rồi mới gửi panel
+  client.once('ready', async () => {
+    // Đợi thêm 2s để cache dữ liệu server
+    setTimeout(async () => {
+      await sendTicketPanel(client);
+    }, 2000);
+  });
 
-  // 2. Đăng ký listener cho button ticket
+  // Đăng ký listener cho button ticket
   client.on('interactionCreate', async (interaction) => {
-    // Chỉ xử lý button và đúng customId
     if (!interaction.isButton()) return;
     if (interaction.customId !== 'ticket_create' && !interaction.customId.startsWith('ticket_close_')) return;
 
-    // Lấy db (nếu có) từ file economy hoặc để trống
     let db = {};
     let saveDb = () => {};
     try {
-      // Nếu có file economy.json, đọc vào
       const econFile = path.join(__dirname, '../economy.json');
       if (fs.existsSync(econFile)) {
         db = JSON.parse(fs.readFileSync(econFile, 'utf8'));
@@ -186,13 +196,11 @@ module.exports = async function(client) {
       }
     } catch (e) {}
 
-    // Xử lý create ticket
     if (interaction.customId === 'ticket_create') {
       await handleInteraction(interaction, db, saveDb);
       return;
     }
 
-    // Xử lý close ticket
     if (interaction.customId.startsWith('ticket_close_')) {
       const ticketId = parseInt(interaction.customId.split('_')[2]);
       if (isNaN(ticketId)) {
