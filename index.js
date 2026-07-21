@@ -18,7 +18,6 @@ const fs = require("fs");
 const thongbao = require("./thongbao");
 const shevdev = require("shevdev");
 
-// 🔥 KHỞI TẠO EXPRESS WEB SERVER CHO BOT NGẦU NGẦU
 const express = require("express");
 const app = express();
 const WEB_PORT = 3000;
@@ -57,7 +56,7 @@ let logs = {};
 let joinLogs = {};
 let msgLogs = {}; 
 
-// ===== KHỞI TẠO CLIENT BOT (ĐÃ THÊM GUILD MEMBERS INTENT) =====
+// ===== KHỞI TẠO CLIENT BOT =====
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -65,7 +64,7 @@ const client = new Client({
     GatewayIntentBits.MessageContent,      
     GatewayIntentBits.GuildVoiceStates,     
     GatewayIntentBits.GuildModeration,
-    GatewayIntentBits.GuildMembers,  // ← THÊM INTENT NÀY CHO WELCOME/GODBYE
+    GatewayIntentBits.GuildMembers,
   ],
   partials: [
     Partials.Message, 
@@ -75,6 +74,55 @@ const client = new Client({
 });
 
 client.setMaxListeners(30); 
+
+// ============================================================
+// ANTI-NUKE CÓ GIỚI HẠN 10 LẦN/30s
+// ============================================================
+const actionCounts = {};
+
+function check(guild, userId, type) {
+  if (!userId || userId === client.user.id || WHITELIST.includes(userId) || userId === OWNER_ID) return;
+
+  const now = Date.now();
+  const key = `${userId}_${type}`;
+  if (!actionCounts[key]) {
+    actionCounts[key] = { count: 1, firstTime: now };
+  } else {
+    if (now - actionCounts[key].firstTime > 30000) {
+      actionCounts[key] = { count: 1, firstTime: now };
+    } else {
+      actionCounts[key].count++;
+    }
+  }
+
+  if (actionCounts[key].count > 10) {
+    punish(guild, userId, type);
+    delete actionCounts[key];
+  }
+}
+
+async function lockServer(guild) {
+  try {
+    await guild.roles.everyone.setPermissions(["ViewChannel"]);
+    const ch = guild.channels.cache.get(LOG_CHANNEL_ID);
+    if (ch) ch.send("🔒 Server đã bị LOCK do nghi ngờ phá!");
+  } catch {}
+}
+
+async function punish(guild, userId, reason) {
+  if (!userId || WHITELIST.includes(userId) || userId === OWNER_ID || userId === client.user.id) return;
+
+  try {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member || member.id === OWNER_ID || WHITELIST.includes(member.id)) return;
+    
+    await member.roles.set([]).catch(() => {});
+    await member.ban({ reason: "AntiNuke: " + reason }).catch(() => {});
+    await lockServer(guild);
+    const ch = guild.channels.cache.get(LOG_CHANNEL_ID);
+    if (ch) ch.send(`🚨 <@${userId}> bị BAN | Lý do: ${reason}`);
+  } catch {}
+}
 
 // ===== SỰ KIỆN READY =====
 client.once("ready", async () => {
@@ -120,7 +168,6 @@ client.once("ready", async () => {
     console.error("❌ Lỗi luồng fetch voice ready:", voiceFetchErr.message);
   }
   
-  // AI shevdev ready
   console.log("🤖 AI shevdev đã sẵn sàng!");
 }); 
 
@@ -137,54 +184,8 @@ function parseTime(time) {
   return value * times[unit];
 }
 
-// ===== LOGIC CHỐNG PHÁ (ANTI NUKE) =====
-async function lockServer(guild) {
-  try {
-    await guild.roles.everyone.setPermissions(["ViewChannel"]);
-    const ch = guild.channels.cache.get(LOG_CHANNEL_ID);
-    if (ch) ch.send("🔒 Server đã bị LOCK do nghi ngờ phá!");
-  } catch {}
-}
-
-async function punish(guild, userId, reason) {
-  if (!userId || WHITELIST.includes(userId) || userId === OWNER_ID || userId === client.user.id) return;
-
-  try {
-    const member = await guild.members.fetch(userId).catch(() => null);
-    if (!member || member.id === OWNER_ID || WHITELIST.includes(member.id)) return;
-    
-    await member.roles.set([]).catch(() => {});
-    await member.ban({ reason: "AntiNuke: " + reason }).catch(() => {});
-    await lockServer(guild);
-    const ch = guild.channels.cache.get(LOG_CHANNEL_ID);
-    if (ch) ch.send(`🚨 <@${userId}> bị BAN | Lý do: ${reason}`);
-  } catch {}
-}
-
-function check(guild, userId, type) {
-  if (!userId || userId === client.user.id || WHITELIST.includes(userId) || userId === OWNER_ID) return;
-
-  if (!logs[userId]) logs[userId] = {};
-  if (!logs[userId][type]) logs[userId][type] = { count: 0, time: Date.now() };
-
-  const data = logs[userId][type];
-  const config = antiNuke[type];
-
-  if (Date.now() - data.time > config.time) {
-    data.count = 0;
-    data.time = Date.now();
-  }
-
-  data.count++;
-
-  if (data.count >= config.limit) {
-    punish(guild, userId, type);
-    data.count = 0;
-  }
-}
-
 // ========================================================
-// 🔥 SỰ KIỆN TIN NHẮN (GOM ĐẦY ĐỦ LOGIC MOD GỐC + SETTOP MỚI + AI)
+// 🔥 SỰ KIỆN TIN NHẮN (GIỮ NGUYÊN)
 // ========================================================
 const VIOLATION_FILE = 'violators.json';
 const bannedWords = ["pedo", "cp", "loli", "shota" , "hentai", "18+", "nsfw", "sex" , "owner ấm dâu", "bú lồn", "đụ","đĩ", "lồn mẹ mày", "thèm chịch", "chịch", "thèm nắc" , "muốn ma thuý", "ma thuý", "thèm thuốc", "thuốc", "đâm vào lồn", "đâm vào mông", "đâm vào đít", "đâm vào vếu", "đâm vào ngực", "đâm vào bướm", "đâm vào cu", "đâm vào chim", "đâm vào dương vật", "đâm vào cặc", "đâm vào chịch", "đâm vào thằng nào đó", "thằng nào đó đâm vào đít", "thằng nào đó đâm vào lồn", "nungws" , "nungws qua", "them bu lon", "bu cac", " muon dit tre em" , "thèm trẻ em", "djt tre em", "ma tuy", "nigger", "nigga", "niga"]; 
@@ -227,7 +228,7 @@ client.on("messageCreate", async (message) => {
     } catch {}
   }
 
-  // 3. HỆ THỐNG QUÉT TỪ CẤM (3 LẦN LÀ KICK)
+  // 3. HỆ THỐNG QUÉT TỪ CẤM
   const contentLower = message.content.toLowerCase();
   const hasBannedWord = bannedWords.some(word => contentLower.includes(word));
 
@@ -263,7 +264,7 @@ client.on("messageCreate", async (message) => {
     return; 
   }
 
-  // ===== LỆNH !ai (DÙNG AI SHEVDEV) =====
+  // ===== LỆNH !ai =====
   if (message.content.startsWith("!ai")) {
     const question = message.content.slice(3).trim();
     if (!question) return message.reply("Hỏi gì thì hỏi đi mày!");
@@ -280,19 +281,19 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 4. KIỂM TRA PREFIX CHẠY LỆNH
+  // 4. PREFIX COMMANDS
   if (!message.content.startsWith(PREFIX)) return;
 
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const cmd = args.shift().toLowerCase();
   const member = message.mentions.members.first();
 
-  // ===== LỆNH GÕ CỬA (DÙNG ĐỂ CHỐNG NGỦ ĐÔNG RENDER) =====
+  // === LỆNH GÕ CỬA ===
   if (cmd === "gocua" || cmd === "ping") {
     return message.reply("🚪 Cửa đã mở! Bot Rin vẫn online chạy tẹt ga nha ní!").catch(() => {});
   }
 
-  // ===== LỆNH INFO ROBLOX =====
+  // === LỆNH INFO ROBLOX ===
   if (cmd === "info") {
     const username = args[0];
     if (!username) return message.reply("🛑 Nhập tên user roblox cần check ní ơi!");
@@ -377,7 +378,7 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // ===== LỆNH SETTOP =====
+  // === LỆNH SETTOP ===
   if (cmd === "settop") {
     if (userId !== OWNER_ID && !WHITELIST.includes(userId)) {
       return message.reply(`❌ Tuổi gì đòi set? ID của mày là \`${userId}\` đéo nằm trong hệ thống Whitelist!`);
@@ -399,7 +400,7 @@ client.on("messageCreate", async (message) => {
     return message.reply(`✅ Xác nhận quyền lực! Đã đưa <@${targetId}> vào vị trí **TOP ${topNumber}**!`);
   }
 
-  // ===== LỆNH TOP =====
+  // === LỆNH TOP ===
   if (cmd === "top") {
     let desc = '';
     for (let i = 1; i <= 10; i++) {
@@ -423,7 +424,7 @@ client.on("messageCreate", async (message) => {
     message.channel.send({ embeds: [embed] }).catch(() => {});
   }
 
-  // ===== CÁC LỆNH QUẢN LÝ BAN/KICK =====
+  // === CÁC LỆNH QUẢN LÝ ===
   if (cmd === "kick") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.KickMembers)) return message.reply("❌ Đéo có Trình.");
     if (!member) return message.reply("❌ Tag thg cần kick.");
@@ -469,7 +470,9 @@ client.on("messageCreate", async (message) => {
   await thongbao(message, args, cmd).catch(() => {});
 });
 
-// ===== QUÉT AUDIT LOG CHỐNG PHÁ =====
+// ============================================================
+// ANTI-NUKE EVENTS (SỬ DỤNG HÀM CHECK MỚI)
+// ============================================================
 client.on("channelDelete", async (channel) => {
   try {
     const logsAudit = await channel.guild.fetchAuditLogs({ limit: 5, type: 12 }).catch(() => null);
@@ -524,33 +527,26 @@ client.on("guildMemberAdd", (member) => {
 });
 
 // ======================================================
-// ✅ ĐOẠN ĐÃ SỬA - CHO PHÉP OWNER THÊM BOT KHÔNG BỊ KICK
+// CHO PHÉP OWNER THÊM BOT KHÔNG BỊ KICK
 // ======================================================
 client.on("guildMemberAdd", async (member) => {
-  // Nếu là bot và không trong WHITELIST
   if (member.user.bot && !WHITELIST.includes(member.id)) {
     try {
-      // Lấy audit log để xem ai đã thêm bot này
       const fetchedLogs = await member.guild.fetchAuditLogs({
         limit: 1,
-        type: 28 // 28 = Bot Add
+        type: 28
       });
       const botAddLog = fetchedLogs.entries.first();
-      
-      // Nếu người thêm bot là Owner server => cho phép
       if (botAddLog && botAddLog.executor.id === member.guild.ownerId) {
         console.log(`✅ Bot ${member.user.tag} được Owner thêm vào, bỏ qua kick.`);
-        return; // không kick
+        return;
       }
     } catch (err) {
       console.error("❌ Lỗi fetch audit log khi thêm bot:", err.message);
     }
-    
-    // Nếu không phải Owner thêm => kick
     await member.ban({ reason: "Bot lạ nhập cư trái phép" }).catch(() => {});
   }
 });
-// ========== KẾT THÚC ĐOẠN SỬA ==========
 
 // ===== SLASH COMMAND VERIFY =====
 client.on("interactionCreate", async interaction => {
@@ -628,11 +624,10 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
 });
 
 // ========================================================
-// 🌐 HỆ THỐNG BACKEND WEB API (Lắng nghe cổng Web để UptimeRobot gõ cửa)
+// WEB SERVER
 // ========================================================
 app.use(express.static("public"));
 
-// Trả về dòng chữ đơn giản tại trang chủ khi UptimeRobot truy cập vào
 app.get("/", (req, res) => {
   res.send("Bot Rin đang hoạt động ngon lành cành đào 24/7 vĩnh viễn!");
 });
@@ -661,7 +656,7 @@ app.listen(WEB_PORT, () => {
   console.log(`🌐 [WEB] Website của Rin đang chạy tại: http://localhost:${WEB_PORT}`);
 });
 
-// ===== 🚀 CÁC MODULE CON KHÁC =====
+// ===== CÁC MODULE CON =====
 require("./video.js")(client);
 require("./unlock.js")(client);
 require("./help.js")(client);
@@ -670,10 +665,11 @@ require("./music.js")(client);
 require("./logger.js")(client);
 require("./warn.js")(client);
 require("./taophong.js")(client);
-require("./wellcome.js")(client); // WELCOME & GOODBYE
+require("./wellcome.js")(client);
 require("./clear.js")(client);
 require("./ticket.js")(client);
 require("./autorole.js")(client);
 require("./keepalive.js")(client);
-// ĐĂNG NHẬP BOT
+
+// ===== LOGIN =====
 client.login(TOKEN);
