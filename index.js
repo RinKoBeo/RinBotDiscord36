@@ -187,9 +187,12 @@ function parseTime(time) {
 // ============================================================
 // DANH SÁCH TỪ CẤM (ĐÃ THÊM BIẾN THỂ LEETSPEAK/HOMOGLYPH)
 // ============================================================
+// ============================================================
+// DANH SÁCH TỪ CẤM (TỐI ƯU, KHÔNG GÂY TRÀN RAM)
+// ============================================================
 const VIOLATION_FILE = 'violators.json';
 
-// --- DANH SÁCH GỐC ---
+// Danh sách từ gốc (viết thường, không dấu)
 const baseWords = [
   "pedo", "cp", "loli", "shota", "hentai", "18+", "nsfw", "sex",
   "owner ấm dâu", "bú lồn", "đụ", "đĩ", "lồn mẹ mày",
@@ -203,57 +206,48 @@ const baseWords = [
   "nigger", "nigga", "niga"
 ];
 
-// --- TẠO BIẾN THỂ LEETSPEAK/HOMOGLYPH ---
-function generateLeetVariants(word) {
+// Hàm tạo biến thể đơn giản, không đệ quy sâu
+function generateSimpleVariants(word) {
   const variants = new Set();
-  const w = word.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const w = word.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // bỏ dấu
 
-  const map = {
-    'a': ['4', '@', 'á', 'à', 'ạ', 'ả', 'ã', 'â', 'ầ', 'ẩ', 'ẫ', 'ậ', 'ă', 'ằ', 'ẳ', 'ẵ', 'ặ'],
-    'e': ['3', 'é', 'è', 'ẻ', 'ẽ', 'ẹ', 'ê', 'ề', 'ể', 'ễ', 'ệ'],
-    'i': ['1', '!', 'í', 'ì', 'ỉ', 'ĩ', 'ị'],
-    'o': ['0', 'ó', 'ò', 'ỏ', 'õ', 'ọ', 'ô', 'ồ', 'ổ', 'ỗ', 'ộ', 'ơ', 'ờ', 'ở', 'ỡ', 'ợ'],
-    'u': ['v', 'ú', 'ù', 'ủ', 'ũ', 'ụ', 'ư', 'ừ', 'ử', 'ữ', 'ự'],
-    'y': ['j', 'ý', 'ỳ', 'ỷ', 'ỹ', 'ỵ'],
-    's': ['5', 'z', 'š'],
-    't': ['7', '+', 'ť'],
-    'g': ['9', 'ğ'],
-    'b': ['8', 'ḅ'],
-    'c': ['(', 'ć', 'č'],
-    'd': ['ḋ'],
-    'h': ['#', 'ḧ'],
-    'l': ['1', 'ł'],
-    'n': ['ñ', 'ń'],
-    'm': ['ṃ'],
-    'p': ['ṗ'],
-    'r': ['ṛ'],
-    'x': ['×', '*'],
-    'k': ['ķ'],
-    'f': ['ƒ'],
-    'v': ['ν'],
-    'w': ['ω']
+  // Bảng ánh xạ cơ bản (chỉ những ký tự phổ biến)
+  const leetMap = {
+    'a': ['4', '@'],
+    'e': ['3'],
+    'i': ['1', '!'],
+    'o': ['0'],
+    's': ['5', 'z'],
+    't': ['7'],
+    'g': ['9'],
+    'b': ['8'],
+    'c': ['('],
+    'n': ['ñ'],
+    'u': ['v']
   };
 
-  function generate(index, current) {
-    if (index === w.length) {
-      variants.add(current);
-      return;
-    }
-    const char = w[index];
-    generate(index + 1, current + char);
-    if (map[char]) {
-      for (const repl of map[char]) {
-        generate(index + 1, current + repl);
+  // 1. Thêm từ gốc
+  variants.add(w);
+
+  // 2. Thêm từ gốc viết hoa
+  variants.add(w.toUpperCase());
+
+  // 3. Thay thế từng ký tự một (không tổ hợp)
+  for (let i = 0; i < w.length; i++) {
+    const char = w[i];
+    if (leetMap[char]) {
+      for (const repl of leetMap[char]) {
+        const newWord = w.slice(0, i) + repl + w.slice(i + 1);
+        variants.add(newWord);
       }
     }
-    generate(index + 1, current + char.toUpperCase());
   }
 
-  generate(0, '');
-
+  // 4. Thêm biến thể bỏ dấu cách (nếu có)
   if (word.includes(' ')) {
     const noSpace = w.replace(/ /g, '');
     variants.add(noSpace);
+    // Viết tắt
     const acronym = w.split(' ').map(s => s[0]).join('');
     variants.add(acronym);
   }
@@ -261,29 +255,29 @@ function generateLeetVariants(word) {
   return Array.from(variants);
 }
 
+// Tạo danh sách từ cấm
 let bannedWords = [];
 for (const word of baseWords) {
-  bannedWords = bannedWords.concat(generateLeetVariants(word));
+  bannedWords = bannedWords.concat(generateSimpleVariants(word));
 }
 
+// Thêm các biến thể thủ công cực kỳ phổ biến
 const extraVariants = [
   "n18g3r", "n1gg3r", "n1gg4", "n1gga", "nigg3r", "nigg4",
-  "n18ga", "n18g4", "p3d0", "p3do", "ped0", "l0l1", "l0l!",
-  "sh0t4", "sh0ta", "h3nt41", "h3ntai", "hent41",
-  "s3x", "seX", "c.p", "c@p", "c-p", "c_p",
-  "d.u", "d-u", "d_u", "d.ụ", "d-ụ", "d_ụ",
-  "ma túy", "ma tui", "matuy", "ma tuý",
+  "n18ga", "n18g4", "p3d0", "p3do", "ped0",
+  "l0l1", "l0l!", "sh0t4", "sh0ta", "h3nt41", "h3ntai",
+  "s3x", "c.p", "c@p", "c-p", "c_p",
+  "d.u", "d-u", "d_u", "ma túy", "ma tui", "matuy",
   "chech", "chich", "dit", "djt",
   "bu lon", "bu lồn", "bú lon", "bú lồn",
-  "cac", "cắc", "cặc",
-  "loz", "lồn", "lon",
-  "cl", "cặc lồn", "vcl", "vặc lồn",
-  "đụ má", "duma", "du ma"
+  "cac", "cắc", "cặc", "loz", "lồn", "lon",
+  "cl", "đụ má", "duma", "du ma", "vcl"
 ];
 bannedWords = bannedWords.concat(extraVariants);
+
+// Loại bỏ trùng lặp
 bannedWords = [...new Set(bannedWords)];
 console.log(`✅ Đã tạo ${bannedWords.length} từ cấm (bao gồm biến thể leetspeak)`);
-
 // ============================================================
 // SỰ KIỆN TIN NHẮN
 // ============================================================
