@@ -185,11 +185,123 @@ function parseTime(time) {
 }
 
 // ========================================================
-// 🔥 SỰ KIỆN TIN NHẮN (GIỮ NGUYÊN)
+// 🔥 SỰ KIỆN TIN NHẮN 
 // ========================================================
 const VIOLATION_FILE = 'violators.json';
-const bannedWords = ["pedo", "cp", "loli", "shota" , "hentai", "18+", "nsfw", "sex" , "owner ấm dâu", "bú lồn", "đụ","đĩ", "lồn mẹ mày", "thèm chịch", "chịch", "thèm nắc" , "muốn ma thuý", "ma thuý", "thèm thuốc", "thuốc", "đâm vào lồn", "đâm vào mông", "đâm vào đít", "đâm vào vếu", "đâm vào ngực", "đâm vào bướm", "đâm vào cu", "đâm vào chim", "đâm vào dương vật", "đâm vào cặc", "đâm vào chịch", "đâm vào thằng nào đó", "thằng nào đó đâm vào đít", "thằng nào đó đâm vào lồn", "nungws" , "nungws qua", "them bu lon", "bu cac", " muon dit tre em" , "thèm trẻ em", "djt tre em", "ma tuy", "nigger", "nigga", "niga"]; 
+// ===== DANH SÁCH TỪ GỐC (VIẾT THƯỜNG, KHÔNG DẤU) =====
+const baseWords = [
+  "pedo", "cp", "loli", "shota", "hentai", "18+", "nsfw", "sex",
+  "owner ấm dâu", "bú lồn", "đụ", "đĩ", "lồn mẹ mày",
+  "thèm chịch", "chịch", "thèm nắc", "muốn ma thuý", "ma thuý",
+  "thèm thuốc", "thuốc", "đâm vào lồn", "đâm vào mông", "đâm vào đít",
+  "đâm vào vếu", "đâm vào ngực", "đâm vào bướm", "đâm vào cu",
+  "đâm vào chim", "đâm vào dương vật", "đâm vào cặc", "đâm vào chịch",
+  "đâm vào thằng nào đó", "thằng nào đó đâm vào đít", "thằng nào đó đâm vào lồn",
+  "nungws", "nungws qua", "them bu lon", "bu cac",
+  "muon dit tre em", "thèm trẻ em", "djt tre em", "ma tuy",
+  "nigger", "nigga", "niga"
+];
 
+// ===== TẠO BIẾN THỂ LEETSPEAK VÀ HOMOGLYPH =====
+function generateLeetVariants(word) {
+  const variants = new Set();
+  const w = word.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // bỏ dấu tiếng Việt
+
+  // Bảng ánh xạ ký tự -> biến thể
+  const map = {
+    'a': ['4', '@', 'á', 'à', 'ạ', 'ả', 'ã', 'â', 'ầ', 'ẩ', 'ẫ', 'ậ', 'ă', 'ằ', 'ẳ', 'ẵ', 'ặ'],
+    'e': ['3', 'é', 'è', 'ẻ', 'ẽ', 'ẹ', 'ê', 'ề', 'ể', 'ễ', 'ệ'],
+    'i': ['1', '!', 'í', 'ì', 'ỉ', 'ĩ', 'ị'],
+    'o': ['0', 'ó', 'ò', 'ỏ', 'õ', 'ọ', 'ô', 'ồ', 'ổ', 'ỗ', 'ộ', 'ơ', 'ờ', 'ở', 'ỡ', 'ợ'],
+    'u': ['v', 'ú', 'ù', 'ủ', 'ũ', 'ụ', 'ư', 'ừ', 'ử', 'ữ', 'ự'],
+    'y': ['j', 'ý', 'ỳ', 'ỷ', 'ỹ', 'ỵ'],
+    's': ['5', 'z', 'š'],
+    't': ['7', '+', 'ť'],
+    'g': ['9', 'ğ'],
+    'b': ['8', 'ḅ'],
+    'c': ['(', 'ć', 'č'],
+    'd': ['ḋ'],
+    'h': ['#', 'ḧ'],
+    'l': ['1', 'ł'],
+    'n': ['ñ', 'ń'],
+    'm': ['ṃ'],
+    'p': ['ṗ'],
+    'r': ['ṛ'],
+    'x': ['×', '*'],
+    'k': ['ķ'],
+    'f': ['ƒ'],
+    'v': ['ν'],
+    'w': ['ω']
+  };
+
+  // Sinh tất cả tổ hợp thay thế (giới hạn để tránh bùng nổ)
+  function generate(index, current) {
+    if (index === w.length) {
+      variants.add(current);
+      return;
+    }
+    const char = w[index];
+    // Giữ nguyên ký tự
+    generate(index + 1, current + char);
+    // Thay thế nếu có
+    if (map[char]) {
+      for (const repl of map[char]) {
+        generate(index + 1, current + repl);
+      }
+    }
+    // Thêm biến thể viết hoa (Discord sẽ toLowerCase, nhưng vẫn thêm cho chắc)
+    generate(index + 1, current + char.toUpperCase());
+  }
+
+  generate(0, '');
+
+  // Thêm các biến thể đặc biệt cho từ ghép (bỏ dấu cách)
+  if (word.includes(' ')) {
+    const noSpace = w.replace(/ /g, '');
+    variants.add(noSpace);
+    // Thêm biến thể viết tắt (lấy chữ cái đầu)
+    const acronym = w.split(' ').map(s => s[0]).join('');
+    variants.add(acronym);
+  }
+
+  return Array.from(variants);
+}
+
+// ===== TẠO DANH SÁCH TỪ CẤM ĐẦY ĐỦ =====
+let bannedWords = [];
+for (const word of baseWords) {
+  bannedWords = bannedWords.concat(generateLeetVariants(word));
+}
+
+// Thêm thủ công các biến thể leetspeak cực kỳ phổ biến
+const extraVariants = [
+  "n18g3r", "n1gg3r", "n1gg4", "n1gga", "nigg3r", "nigg4",
+  "n18ga", "n18g4", "n1gg3r", "n1gga", "n1gg4", "n1gg3r",
+  "p3d0", "p3do", "ped0", "p3do", "p3d0",
+  "l0l1", "l0l!", "l0l1", "l0l!",
+  "sh0t4", "sh0ta", "sh0t4", "sh0ta",
+  "h3nt41", "h3ntai", "h3nt41", "hent41",
+  "s3x", "s3x", "seX", "s3x",
+  "c.p", "c@p", "c-p", "c_p",
+  "d.u", "d-u", "d_u", "d.ụ", "d-ụ", "d_ụ",
+  "ma túy", "ma tui", "matuy", "ma tuý",
+  "chech", "chich", "dit", "djt", "djt",
+  "bu lon", "bu lồn", "bú lon", "bú lồn",
+  "cac", "cắc", "cac", "cặc",
+  "loz", "lồn", "lon",
+  "cl", "cặc lồn", "cl",
+  "đụ má", "duma", "du ma", "duma",
+  "vcl", "vcl", "vặc lồn",
+];
+bannedWords = bannedWords.concat(extraVariants);
+
+// Loại bỏ trùng lặp và sắp xếp
+bannedWords = [...new Set(bannedWords)];
+console.log(`✅ Đã tạo ${bannedWords.length} từ cấm (bao gồm biến thể leetspeak)`);
+
+// ============================================================
+// SỰ KIỆN MESSAGE CREATE
+// ============================================================
 client.on("messageCreate", async (message) => {
   if (message.author.bot || !message.guild) return;
 
@@ -211,7 +323,7 @@ client.on("messageCreate", async (message) => {
       `${message.author}  e sẽ bị bỏ rơi nếu cứ ping anh chàng tài sắc vẹn toàn này`
     ];
     const random = replies[Math.floor(Math.random() * replies.length)];
-    await message.reply(random).catch(() => {});
+    message.reply(random).catch(() => {});
   }
 
   // 2. CHỐNG SPAM CHAT GỐC
