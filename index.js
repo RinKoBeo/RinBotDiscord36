@@ -8,11 +8,11 @@ const {
   SlashCommandBuilder,
   REST,
   Routes,
-  Partials,
-  Collection
+  Partials, 
+  Collection 
 } = require("discord.js");
 
-const { joinVoiceChannel } = require("@discordjs/voice");
+const { joinVoiceChannel } = require("@discordjs/voice"); 
 const noblox = require("noblox.js");
 const fs = require("fs");
 const thongbao = require("./thongbao");
@@ -54,26 +54,26 @@ const antiNuke = {
 
 let logs = {};
 let joinLogs = {};
-let msgLogs = {};
+let msgLogs = {}; 
 
 // ===== KHỞI TẠO CLIENT BOT =====
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.MessageContent,      
+    GatewayIntentBits.GuildVoiceStates,     
     GatewayIntentBits.GuildModeration,
     GatewayIntentBits.GuildMembers,
   ],
   partials: [
-    Partials.Message,
-    Partials.Channel,
+    Partials.Message, 
+    Partials.Channel, 
     Partials.Reaction
-  ],
+  ], 
 });
 
-client.setMaxListeners(30);
+client.setMaxListeners(30); 
 
 // ============================================================
 // ANTI-NUKE CÓ GIỚI HẠN 10 LẦN/30s
@@ -115,7 +115,7 @@ async function punish(guild, userId, reason) {
   try {
     const member = await guild.members.fetch(userId).catch(() => null);
     if (!member || member.id === OWNER_ID || WHITELIST.includes(member.id)) return;
-
+    
     await member.roles.set([]).catch(() => {});
     await member.ban({ reason: "AntiNuke: " + reason }).catch(() => {});
     await lockServer(guild);
@@ -146,8 +146,8 @@ client.once("ready", async () => {
 
   console.log("✅ Slash command loaded");
 
-  const ID_SERVER_CỦA_MÀY = "1525856288444125197";
-  const ID_PHÒNG_VOICE_MUỐN_BOT_NGỒI = "1505850307765080194";
+  const ID_SERVER_CỦA_MÀY = "1525856288444125197"; 
+  const ID_PHÒNG_VOICE_MUỐN_BOT_NGỒI = "1505850307765080194"; 
 
   try {
     const guild = await client.guilds.fetch(ID_SERVER_CỦA_MÀY).catch(() => null);
@@ -158,8 +158,8 @@ client.once("ready", async () => {
           channelId: voiceChannel.id,
           guildId: guild.id,
           adapterCreator: guild.voiceAdapterCreator,
-          selfMute: false,
-          selfDeaf: true
+          selfMute: false, 
+          selfDeaf: true   
         });
         console.log(`🤖 [VOICE 24/7] Rin đã ngồi phòng voice: ${voiceChannel.name}`);
       }
@@ -167,9 +167,9 @@ client.once("ready", async () => {
   } catch (voiceFetchErr) {
     console.error("❌ Lỗi luồng fetch voice ready:", voiceFetchErr.message);
   }
-
+  
   console.log("🤖 AI shevdev đã sẵn sàng!");
-});
+}); 
 
 // ===== HÀM PARSE THỜI GIAN =====
 function parseTime(time) {
@@ -185,15 +185,11 @@ function parseTime(time) {
 }
 
 // ============================================================
-// DANH SÁCH TỪ CẤM (ĐÃ THÊM BIẾN THỂ LEETSPEAK/HOMOGLYPH)
-// ============================================================
-// ============================================================
-// DANH SÁCH TỪ CẤM (TỐI ƯU, KHÔNG GÂY TRÀN RAM)
+// DANH SÁCH TỪ CẤM (GIỮ NGUYÊN CẤU TRÚC CŨ + THÊM BIẾN THỂ)
 // ============================================================
 const VIOLATION_FILE = 'violators.json';
-
-// Danh sách từ gốc (viết thường, không dấu)
-const baseWords = [
+const bannedWords = [
+  // Từ cấm gốc
   "pedo", "cp", "loli", "shota", "hentai", "18+", "nsfw", "sex",
   "owner ấm dâu", "bú lồn", "đụ", "đĩ", "lồn mẹ mày",
   "thèm chịch", "chịch", "thèm nắc", "muốn ma thuý", "ma thuý",
@@ -203,66 +199,9 @@ const baseWords = [
   "đâm vào thằng nào đó", "thằng nào đó đâm vào đít", "thằng nào đó đâm vào lồn",
   "nungws", "nungws qua", "them bu lon", "bu cac",
   "muon dit tre em", "thèm trẻ em", "djt tre em", "ma tuy",
-  "nigger", "nigga", "niga"
-];
-
-// Hàm tạo biến thể đơn giản, không đệ quy sâu
-function generateSimpleVariants(word) {
-  const variants = new Set();
-  const w = word.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // bỏ dấu
-
-  // Bảng ánh xạ cơ bản (chỉ những ký tự phổ biến)
-  const leetMap = {
-    'a': ['4', '@'],
-    'e': ['3'],
-    'i': ['1', '!'],
-    'o': ['0'],
-    's': ['5', 'z'],
-    't': ['7'],
-    'g': ['9'],
-    'b': ['8'],
-    'c': ['('],
-    'n': ['ñ'],
-    'u': ['v']
-  };
-
-  // 1. Thêm từ gốc
-  variants.add(w);
-
-  // 2. Thêm từ gốc viết hoa
-  variants.add(w.toUpperCase());
-
-  // 3. Thay thế từng ký tự một (không tổ hợp)
-  for (let i = 0; i < w.length; i++) {
-    const char = w[i];
-    if (leetMap[char]) {
-      for (const repl of leetMap[char]) {
-        const newWord = w.slice(0, i) + repl + w.slice(i + 1);
-        variants.add(newWord);
-      }
-    }
-  }
-
-  // 4. Thêm biến thể bỏ dấu cách (nếu có)
-  if (word.includes(' ')) {
-    const noSpace = w.replace(/ /g, '');
-    variants.add(noSpace);
-    // Viết tắt
-    const acronym = w.split(' ').map(s => s[0]).join('');
-    variants.add(acronym);
-  }
-
-  return Array.from(variants);
-}
-
-// Tạo danh sách từ cấm
-let bannedWords = [];
-for (const word of baseWords) {
-  bannedWords = bannedWords.concat(generateSimpleVariants(word));
-}
-
-// Thêm các biến thể thủ công cực kỳ phổ biến
-const extraVariants = [
+  "nigger", "nigga", "niga",
+  
+  // Biến thể leetspeak phổ biến để chặn bypass
   "n18g3r", "n1gg3r", "n1gg4", "n1gga", "nigg3r", "nigg4",
   "n18ga", "n18g4", "p3d0", "p3do", "ped0",
   "l0l1", "l0l!", "sh0t4", "sh0ta", "h3nt41", "h3ntai",
@@ -273,11 +212,9 @@ const extraVariants = [
   "cac", "cắc", "cặc", "loz", "lồn", "lon",
   "cl", "đụ má", "duma", "du ma", "vcl"
 ];
-bannedWords = bannedWords.concat(extraVariants);
 
-// Loại bỏ trùng lặp
-bannedWords = [...new Set(bannedWords)];
-console.log(`✅ Đã tạo ${bannedWords.length} từ cấm (bao gồm biến thể leetspeak)`);
+console.log(`✅ Đã load ${bannedWords.length} từ cấm (bao gồm biến thể leetspeak)`);
+
 // ============================================================
 // SỰ KIỆN TIN NHẮN
 // ============================================================
@@ -315,11 +252,11 @@ client.on("messageCreate", async (message) => {
       await message.member.timeout(100000).catch(() => {});
       const ch = message.guild.channels.cache.get(LOG_CHANNEL_ID);
       if (ch) ch.send(`🚨 ${message.author.tag} spam quá nhiều`);
-      return;
+      return; 
     } catch {}
   }
 
-  // 3. HỆ THỐNG QUÉT TỪ CẤM (DÙNG DANH SÁCH MỚI)
+  // 3. HỆ THỐNG QUÉT TỪ CẤM
   const contentLower = message.content.toLowerCase();
   const hasBannedWord = bannedWords.some(word => contentLower.includes(word));
 
@@ -352,16 +289,16 @@ client.on("messageCreate", async (message) => {
         return message.channel.send(`🔨 Thằng súc vật <@${userId}> đã bị **KICK** khỏi server vì vi phạm từ ngữ cấm đến lần thứ 3!`).catch(() => {});
       }
     }
-    return;
+    return; 
   }
 
   // ===== LỆNH !ai =====
   if (message.content.startsWith("!ai")) {
     const question = message.content.slice(3).trim();
     if (!question) return message.reply("Hỏi gì thì hỏi đi mày!");
-
+    
     await message.channel.sendTyping();
-
+    
     try {
       const reply = await shevdev.chatbot(message.guild.id, message);
       await message.reply(reply);
@@ -395,7 +332,7 @@ client.on("messageCreate", async (message) => {
       const avatar = await noblox.getPlayerThumbnail(rbUserId, "420x420", "png", false, "headshot");
       const playerInfo = await noblox.getPlayerInfo(rbUserId);
       const joinDate = new Date(playerInfo.joinDate);
-
+      
       const diffTime = Math.abs(new Date() - joinDate);
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
       const diffYears = Math.floor(diffDays / 365);
@@ -403,16 +340,16 @@ client.on("messageCreate", async (message) => {
       let ageString = diffYears > 0 ? `${diffYears} năm ${remainingDays} ngày trước` : `${diffDays} ngày trước`;
 
       let friendsListString = "❌ Không có hoặc tài khoản riêng tư";
-      let attachment = null;
+      let attachment = null; 
 
       try {
         const friendsData = await noblox.getFriends(rbUserId);
         if (friendsData && friendsData.data && friendsData.data.length > 0) {
           const totalFriends = friendsData.data.length;
           const validFriends = friendsData.data.filter(f => f.name && f.name.trim() !== "");
-
+          
           if (validFriends.length > 0) {
-            const limitFriends = validFriends.slice(0, 4);
+            const limitFriends = validFriends.slice(0, 4); 
             const friendsLines = limitFriends.map((f, index) => `👤 **${index + 1}.** ${f.displayName ? `${f.displayName}` : f.name}`).join(" | ");
             friendsListString = `👥 **Tổng số bạn:** ${totalFriends} người\n**✨ Bạn thân đại diện:** ${friendsLines}`;
 
@@ -422,13 +359,13 @@ client.on("messageCreate", async (message) => {
                 const Jimp = require("jimp");
                 const { AttachmentBuilder } = require("discord.js");
                 const thumbnails = await noblox.getPlayerThumbnail(friendIds, "150x150", "png", false, "headshot");
-
+                
                 if (thumbnails && thumbnails.length > 0) {
-                  const baseImage = new Jimp(thumbnails.length * 150, 150, 0x2f3136ff);
+                  const baseImage = new Jimp(thumbnails.length * 150, 150, 0x2f3136ff); 
                   for (let i = 0; i < thumbnails.length; i++) {
                     if (thumbnails[i] && thumbnails[i].imageUrl) {
                       const friendImg = await Jimp.read(thumbnails[i].imageUrl);
-                      baseImage.composite(friendImg, i * 150, 0);
+                      baseImage.composite(friendImg, i * 150, 0); 
                     }
                   }
                   const buffer = await baseImage.getBufferAsync(Jimp.MIME_PNG);
@@ -475,8 +412,8 @@ client.on("messageCreate", async (message) => {
       return message.reply(`❌ Tuổi gì đòi set? ID của mày là \`${userId}\` đéo nằm trong hệ thống Whitelist!`);
     }
 
-    const topNumber = parseInt(args[0]);
-    const targetMember = message.mentions.members.first() || args[1];
+    const topNumber = parseInt(args[0]); 
+    const targetMember = message.mentions.members.first() || args[1]; 
 
     if (isNaN(topNumber) || topNumber < 1 || topNumber > 10) {
       return message.reply("❌ Số thứ tự TOP phải từ 1 đến 10! VD: `!settop 1 @Ringada` ");
@@ -486,7 +423,7 @@ client.on("messageCreate", async (message) => {
 
     const targetId = typeof targetMember === "string" ? targetMember : targetMember.id;
     top[topNumber] = targetId;
-    saveTop();
+    saveTop(); 
 
     return message.reply(`✅ Xác nhận quyền lực! Đã đưa <@${targetId}> vào vị trí **TOP ${topNumber}**!`);
   }
@@ -531,7 +468,7 @@ client.on("messageCreate", async (message) => {
   }
 
   if (cmd === "unban") {
-    const userIdToUnban = args[0];
+    const userIdToUnban = args[0]; 
     if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers)) return message.reply("❌ Đéo có Trình.");
     if (!userIdToUnban) return message.reply("❌ Nhập ID của thằng cần unban!");
     try {
@@ -562,7 +499,7 @@ client.on("messageCreate", async (message) => {
 });
 
 // ============================================================
-// ANTI-NUKE EVENTS (SỬ DỤNG HÀM CHECK MỚI)
+// ANTI-NUKE EVENTS
 // ============================================================
 client.on("channelDelete", async (channel) => {
   try {
@@ -649,7 +586,7 @@ client.on("interactionCreate", async interaction => {
 
   try {
     const userId = await noblox.getIdFromUsername(username);
-    const avatar = await noblox.getPlayerThumbnail(userId, "420x420", "png", false, "headshot");
+    const avatar = await noblox.getPlayerThumbnail(userId,"420x420","png",false,"headshot");
 
     const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
     if (!member) return;
@@ -678,7 +615,7 @@ client.on("interactionCreate", async interaction => {
 
 // ===== HỆ THỐNG PHÒNG VOICE TỰ ĐỘNG =====
 const CHANNELS_CREATE_VOICE_ID = process.env.CHANNELS_CREATE_VOICE_ID;
-let dynamicVoices = new Set();
+let dynamicVoices = new Set(); 
 
 client.on("voiceStateUpdate", async (oldState, newState) => {
   try {
@@ -688,12 +625,12 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
 
       const newChannel = await guild.channels.create({
         name: `🎤 Room của ${member.user.username}`,
-        type: 2,
-        parent: newState.channel?.parentId || null,
+        type: 2, 
+        parent: newState.channel?.parentId || null, 
         permissionOverwrites: [
           {
             id: member.id,
-            allow: ["ManageChannels", "MuteMembers", "DeafenMembers", "MoveMembers"],
+            allow: ["ManageChannels", "MuteMembers", "DeafenMembers", "MoveMembers"], 
           }
         ]
       });
@@ -706,7 +643,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       const oldChannel = oldState.guild.channels.cache.get(oldState.channelId);
       if (oldChannel && oldChannel.members.size === 0) {
         await oldChannel.delete("Phòng trống tự động xóa").catch(() => {});
-        dynamicVoices.delete(oldState.channelId);
+        dynamicVoices.delete(oldState.channelId); 
       }
     }
   } catch (err) {
@@ -726,7 +663,7 @@ app.get("/", (req, res) => {
 app.get("/api/top", (req, res) => {
   try {
     const currentTop = JSON.parse(fs.readFileSync('top.json', 'utf8'));
-
+    
     let webTopData = [];
     for (let i = 1; i <= 10; i++) {
       const userId = currentTop[i];
