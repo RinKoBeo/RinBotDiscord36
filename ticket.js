@@ -1,4 +1,4 @@
-// ticket.js - Hệ thống ticket (không emoji, không lỗi, 1 ticket/lần)
+// ticket.js - He thong ticket (khong emoji, khong loi, 1 ticket/lan)
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +9,18 @@ const TICKET_CATEGORY_ID = '';
 const PING_ROLES = ['1525869008862318693', '1525869199379923074', '1525871335354405174', '1525888140211130550'];
 const ADMIN_IDS = ['1517437552213098529'];
 
-let panelMessageId = null; // Lưu ID tin nhắn panel để không gửi trùng
+let panelMessageId = null; // Luu ID tin nhan panel de khong gui trung
+
+// Chong xu ly trung 1 interaction (phong khi event ban ra 2 lan / listener bi gan trung)
+const handledInteractions = new Set();
+function markHandled(id) {
+  handledInteractions.add(id);
+  // don dep sau 15s de khong phinh bo nho
+  setTimeout(() => handledInteractions.delete(id), 15000);
+}
+
+// Chong bam nut "Tao ticket" lien tuc / spam trong luc dang xu ly
+const creatingUsers = new Set();
 
 function readData() {
   if (!fs.existsSync(DATA_FILE)) return { tickets: {}, nextId: 1 };
@@ -33,7 +44,7 @@ function getTicketCount(userId, data) {
   return count;
 }
 
-// ===== GỬI PANEL (CHỈ 1 LẦN) =====
+// ===== GUI PANEL (CHI 1 LAN) =====
 async function sendTicketPanel(client) {
   try {
     const guild = client.guilds.cache.first();
@@ -41,7 +52,6 @@ async function sendTicketPanel(client) {
     const channel = guild.channels.cache.get(TICKET_CHANNEL_ID);
     if (!channel) return;
 
-    // Nếu đã có panel thì không gửi lại
     if (panelMessageId) {
       try {
         const oldMsg = await channel.messages.fetch(panelMessageId);
@@ -49,7 +59,6 @@ async function sendTicketPanel(client) {
       } catch {}
     }
 
-    // Xóa tin nhắn cũ của bot (chỉ xóa những tin có components)
     const messages = await channel.messages.fetch({ limit: 20 });
     for (const msg of messages.values()) {
       if (msg.author.id === client.user.id && msg.components.length > 0) {
@@ -84,172 +93,206 @@ async function sendTicketPanel(client) {
   }
 }
 
-// ===== TẠO TICKET =====
+// ===== TAO TICKET =====
 async function handleCreateTicket(interaction) {
   const userId = interaction.user.id;
   const guild = interaction.guild;
 
-  const data = readData();
-  const count = getTicketCount(userId, data);
-  if (count >= 2) {
+  // Chan spam-click: neu user nay dang co 1 lan tao ticket chua xong thi bo qua
+  if (creatingUsers.has(userId)) {
     return interaction.reply({
-      content: 'Ban da co 2 ticket dang mo. Hay dong ticket cu truoc khi tao moi.',
+      content: 'Yeu cau tao ticket cua ban dang duoc xu ly, vui long doi...',
       ephemeral: true
-    });
+    }).catch(() => {});
   }
+  creatingUsers.add(userId);
 
-  const ticketId = data.nextId++;
-  data.tickets[ticketId] = {
-    userId: userId,
-    userTag: interaction.user.tag,
-    status: 'open',
-    createdAt: Date.now(),
-    channelId: null
-  };
-  saveData(data);
+  // Ack ngay trong 3 giay dau tien de tranh loi "khong phan hoi kip"
+  await interaction.deferReply({ ephemeral: true }).catch(() => {});
 
-  const channelName = `ticket-${interaction.user.username.toLowerCase()}-${ticketId}`;
-  const channelOptions = {
-    name: channelName,
-    topic: `Ticket #${ticketId} | Nguoi tao: ${interaction.user.tag}`,
-    permissionOverwrites: [
-      { id: guild.id, deny: ['ViewChannel'] },
-      { id: userId, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AttachFiles'] },
-      ...ADMIN_IDS.map(id => ({
-        id: id,
-        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels']
-      }))
-    ]
-  };
-  if (TICKET_CATEGORY_ID) {
-    channelOptions.parent = TICKET_CATEGORY_ID;
-  }
+  try {
+    const data = readData();
+    const count = getTicketCount(userId, data);
+    if (count >= 2) {
+      return await interaction.editReply({
+        content: 'Ban da co 2 ticket dang mo. Hay dong ticket cu truoc khi tao moi.'
+      });
+    }
 
-  const channel = await guild.channels.create(channelOptions);
-  data.tickets[ticketId].channelId = channel.id;
-  saveData(data);
+    const ticketId = data.nextId++;
+    data.tickets[ticketId] = {
+      userId: userId,
+      userTag: interaction.user.tag,
+      status: 'open',
+      createdAt: Date.now(),
+      channelId: null
+    };
+    // Ghi ngay nextId/ticket de lan bam tiep theo (neu co) khong bi trung ID
+    saveData(data);
 
-  let pingContent = `<@${userId}>`;
-  for (const roleId of PING_ROLES) {
-    pingContent += ` <@&${roleId}>`;
-  }
+    const channelName = `ticket-${interaction.user.username.toLowerCase()}-${ticketId}`;
+    const channelOptions = {
+      name: channelName,
+      topic: `Ticket #${ticketId} | Nguoi tao: ${interaction.user.tag}`,
+      permissionOverwrites: [
+        { id: guild.id, deny: ['ViewChannel'] },
+        { id: userId, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AttachFiles'] },
+        ...ADMIN_IDS.map(id => ({
+          id: id,
+          allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels']
+        }))
+      ]
+    };
+    if (TICKET_CATEGORY_ID) {
+      channelOptions.parent = TICKET_CATEGORY_ID;
+    }
 
-  const embed = new EmbedBuilder()
-    .setTitle(`Ticket #${ticketId}`)
-    .setDescription(
-      `Nguoi tao: <@${userId}>\n` +
-      `Trang thai: Dang mo\n` +
-      `Thoi gian: <t:${Math.floor(Date.now()/1000)}:F>\n\n` +
-      `Huong dan:\n` +
-      `Hay mo ta van de cua ban tai day.\n` +
-      `Admin se phan hoi trong kenh nay.\n` +
-      `Hay kien nhan cho Admin phan hoi.\n` +
-      `Ban la ally hay member?\n` +
-      `Ban vao day voi muc dich gi?`
-    )
-    .setColor(0xffffff)
-    .setTimestamp();
+    const channel = await guild.channels.create(channelOptions);
+    data.tickets[ticketId].channelId = channel.id;
+    saveData(data);
 
-  const closeRow = new ActionRowBuilder()
-    .addComponents(
-      new ButtonBuilder()
-        .setCustomId(`ticket_close_${ticketId}`)
-        .setLabel('Dong ticket')
-        .setStyle(ButtonStyle.Danger)
-    );
-
-  await channel.send({
-    content: pingContent,
-    embeds: [embed],
-    components: [closeRow]
-  });
-
-  await interaction.reply({
-    content: `Da tao ticket #${ticketId}! Kiem tra kenh <#${channel.id}>.`,
-    ephemeral: true
-  });
-}
-
-// ===== XÓA TICKET =====
-async function handleDeleteTicket(interaction, ticketId) {
-  const data = readData();
-  const ticket = data.tickets[ticketId];
-  if (!ticket) {
-    return interaction.reply({ content: 'Khong tim thay ticket!', ephemeral: true });
-  }
-
-  delete data.tickets[ticketId];
-  saveData(data);
-
-  await interaction.reply({
-    content: `Da xoa ticket #${ticketId} va du lieu.`,
-    ephemeral: true
-  });
-
-  const channel = interaction.guild.channels.cache.get(ticket.channelId);
-  if (channel) {
-    await channel.delete(`Ticket #${ticketId} da bi xoa boi ${interaction.user.tag}`).catch(() => {});
-  }
-}
-
-// ===== ĐÓNG TICKET =====
-async function handleCloseTicket(interaction, ticketId) {
-  const data = readData();
-  const ticket = data.tickets[ticketId];
-  if (!ticket) {
-    return interaction.reply({ content: 'Khong tim thay ticket!', ephemeral: true });
-  }
-  if (ticket.status === 'closed') {
-    return interaction.reply({ content: 'Ticket da dong roi!', ephemeral: true });
-  }
-
-  ticket.status = 'closed';
-  saveData(data);
-
-  const channel = interaction.guild.channels.cache.get(ticket.channelId);
-  if (channel) {
-    await channel.setName(`closed-${channel.name}`).catch(() => {});
-
-    const overwrites = [
-      { id: interaction.guild.id, deny: ['ViewChannel', 'SendMessages'] },
-      ...ADMIN_IDS.map(id => ({
-        id: id,
-        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels']
-      })),
-      { id: interaction.client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] }
-    ];
-    await channel.permissionOverwrites.set(overwrites).catch(() => {});
+    let pingContent = `<@${userId}>`;
+    for (const roleId of PING_ROLES) {
+      pingContent += ` <@&${roleId}>`;
+    }
 
     const embed = new EmbedBuilder()
-      .setTitle(`Ticket #${ticketId} - DA DONG`)
+      .setTitle(`Ticket #${ticketId}`)
       .setDescription(
-        `Ticket da duoc dong boi <@${interaction.user.id}>.\n` +
-        `Kenh nay da bi khoa, khong ai co the chat them.\n` +
-        `Admin co the bam nut "Xoa ticket" ben duoi de xoa kenh.`
+        `Nguoi tao: <@${userId}>\n` +
+        `Trang thai: Dang mo\n` +
+        `Thoi gian: <t:${Math.floor(Date.now()/1000)}:F>\n\n` +
+        `Huong dan:\n` +
+        `Hay mo ta van de cua ban tai day.\n` +
+        `Admin se phan hoi trong kenh nay.\n` +
+        `Hay kien nhan cho Admin phan hoi.\n` +
+        `Ban la ally hay member?\n` +
+        `Ban vao day voi muc dich gi?`
       )
       .setColor(0xffffff)
       .setTimestamp();
 
-    const deleteRow = new ActionRowBuilder()
+    const closeRow = new ActionRowBuilder()
       .addComponents(
         new ButtonBuilder()
-          .setCustomId(`ticket_delete_${ticketId}`)
-          .setLabel('Xoa ticket')
+          .setCustomId(`ticket_close_${ticketId}`)
+          .setLabel('Dong ticket')
           .setStyle(ButtonStyle.Danger)
       );
 
-    await channel.send({ embeds: [embed], components: [deleteRow] });
-  }
+    await channel.send({
+      content: pingContent,
+      embeds: [embed],
+      components: [closeRow]
+    });
 
-  await interaction.reply({
-    content: `Da dong ticket #${ticketId}.`,
-    ephemeral: true
-  });
+    await interaction.editReply({
+      content: `Da tao ticket #${ticketId}! Kiem tra kenh <#${channel.id}>.`
+    });
+  } catch (error) {
+    console.error('Loi tao ticket:', error);
+    await interaction.editReply({ content: 'Co loi xay ra khi tao ticket, vui long thu lai.' }).catch(() => {});
+  } finally {
+    creatingUsers.delete(userId);
+  }
+}
+
+// ===== XOA TICKET =====
+async function handleDeleteTicket(interaction, ticketId) {
+  await interaction.deferReply({ ephemeral: true }).catch(() => {});
+  try {
+    const data = readData();
+    const ticket = data.tickets[ticketId];
+    if (!ticket) {
+      return await interaction.editReply({ content: 'Khong tim thay ticket!' });
+    }
+
+    delete data.tickets[ticketId];
+    saveData(data);
+
+    await interaction.editReply({ content: `Da xoa ticket #${ticketId} va du lieu.` });
+
+    const channel = interaction.guild.channels.cache.get(ticket.channelId);
+    if (channel) {
+      await channel.delete(`Ticket #${ticketId} da bi xoa boi ${interaction.user.tag}`).catch(() => {});
+    }
+  } catch (error) {
+    console.error('Loi xoa ticket:', error);
+    await interaction.editReply({ content: 'Co loi xay ra khi xoa ticket.' }).catch(() => {});
+  }
+}
+
+// ===== DONG TICKET =====
+async function handleCloseTicket(interaction, ticketId) {
+  await interaction.deferReply({ ephemeral: true }).catch(() => {});
+  try {
+    const data = readData();
+    const ticket = data.tickets[ticketId];
+    if (!ticket) {
+      return await interaction.editReply({ content: 'Khong tim thay ticket!' });
+    }
+    if (ticket.status === 'closed') {
+      return await interaction.editReply({ content: 'Ticket da dong roi!' });
+    }
+
+    ticket.status = 'closed';
+    saveData(data);
+
+    const channel = interaction.guild.channels.cache.get(ticket.channelId);
+    if (channel) {
+      await channel.setName(`closed-${channel.name}`).catch(() => {});
+
+      const overwrites = [
+        { id: interaction.guild.id, deny: ['ViewChannel', 'SendMessages'] },
+        ...ADMIN_IDS.map(id => ({
+          id: id,
+          allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels']
+        })),
+        { id: interaction.client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] }
+      ];
+      await channel.permissionOverwrites.set(overwrites).catch(() => {});
+
+      const embed = new EmbedBuilder()
+        .setTitle(`Ticket #${ticketId} - DA DONG`)
+        .setDescription(
+          `Ticket da duoc dong boi <@${interaction.user.id}>.\n` +
+          `Kenh nay da bi khoa, khong ai co the chat them.\n` +
+          `Admin co the bam nut "Xoa ticket" ben duoi de xoa kenh.`
+        )
+        .setColor(0xffffff)
+        .setTimestamp();
+
+      const deleteRow = new ActionRowBuilder()
+        .addComponents(
+          new ButtonBuilder()
+            .setCustomId(`ticket_delete_${ticketId}`)
+            .setLabel('Xoa ticket')
+            .setStyle(ButtonStyle.Danger)
+        );
+
+      await channel.send({ embeds: [embed], components: [deleteRow] });
+    }
+
+    await interaction.editReply({ content: `Da dong ticket #${ticketId}.` });
+  } catch (error) {
+    console.error('Loi dong ticket:', error);
+    await interaction.editReply({ content: 'Co loi xay ra khi dong ticket.' }).catch(() => {});
+  }
 }
 
 // ===== EXPORT =====
 module.exports = async function(client) {
-  // Chỉ gửi panel 1 lần khi bot ready
+  // CHONG GAN LISTENER TRUNG: neu module nay lo bi require/goi nhieu lan
+  // (vd file index.js require 2 lan, hoac code reload) thi cac listener cu
+  // se cong don lai -> 1 lan bam nut se chay handler nhieu lan -> tao ra
+  // nhieu ticket cung luc va gay loi "khong phan hoi kip" do tranh chap
+  // interaction.reply(). Dat co flag tren chinh client de chan viec nay.
+  if (client._ticketModuleLoaded) {
+    console.warn('[ticket.js] Module da duoc load truoc do, bo qua de tranh gan trung listener.');
+    return;
+  }
+  client._ticketModuleLoaded = true;
+
   let panelSent = false;
 
   client.once('ready', async () => {
@@ -261,28 +304,29 @@ module.exports = async function(client) {
     }
   });
 
-  // Xử lý interaction (chỉ 1 listener)
   client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
     if (!interaction.customId.startsWith('ticket_')) return;
+
+    // Neu vi ly do nao do interaction nay da duoc xu ly roi thi bo qua
+    if (handledInteractions.has(interaction.id)) return;
+    markHandled(interaction.id);
 
     const parts = interaction.customId.split('_');
     const action = parts[1];
     const ticketId = parseInt(parts[2]);
 
-    // Nếu action là create thì không cần ticketId
     if (action === 'create') {
       await handleCreateTicket(interaction);
       return;
     }
 
-    // close và delete cần admin và ticketId
     if (action === 'close' || action === 'delete') {
       if (!isAdmin(interaction.user.id)) {
-        return interaction.reply({ content: 'Chi Admin moi lam viec nay!', ephemeral: true });
+        return interaction.reply({ content: 'Chi Admin moi lam viec nay!', ephemeral: true }).catch(() => {});
       }
       if (isNaN(ticketId)) {
-        return interaction.reply({ content: 'Loi ID ticket!', ephemeral: true });
+        return interaction.reply({ content: 'Loi ID ticket!', ephemeral: true }).catch(() => {});
       }
       if (action === 'close') {
         await handleCloseTicket(interaction, ticketId);
