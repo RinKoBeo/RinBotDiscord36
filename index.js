@@ -81,7 +81,7 @@ client.setMaxListeners(30);
 const actionCounts = {};
 
 function check(guild, userId, type) {
-  if (!userId || userId === client.user.id || WHITELIST.includes(userId) || userId === OWNER_ID) return;
+  if (!userId || userId === client.user.id || WHITELIST.includes(userId) || OWNER_ID.includes(userId)) return;
 
   const now = Date.now();
   const key = `${userId}_${type}`;
@@ -110,11 +110,11 @@ async function lockServer(guild) {
 }
 
 async function punish(guild, userId, reason) {
-  if (!userId || WHITELIST.includes(userId) || userId === OWNER_ID || userId === client.user.id) return;
+  if (!userId || WHITELIST.includes(userId) || OWNER_ID.includes(userId) || userId === client.user.id) return;
 
   try {
     const member = await guild.members.fetch(userId).catch(() => null);
-    if (!member || member.id === OWNER_ID || WHITELIST.includes(member.id)) return;
+    if (!member || OWNER_ID.includes(member.id) || WHITELIST.includes(member.id)) return;
     
     await member.roles.set([]).catch(() => {});
     await member.ban({ reason: "AntiNuke: " + reason }).catch(() => {});
@@ -189,7 +189,6 @@ function parseTime(time) {
 // ============================================================
 const VIOLATION_FILE = 'violators.json';
 const bannedWords = [
-  // Từ cấm gốc
   "pedo", "cp", "loli", "shota", "hentai", "18+", "nsfw", "sex",
   "owner ấm dâu", "bú lồn",  "đĩ", 
   "thèm chịch", "chịch", "thèm nắc", "muốn ma thuý", "ma thuý",
@@ -200,8 +199,6 @@ const bannedWords = [
   "nungws", "nungws qua", "them bu lon", "bu cac",
   "muon dit tre em", "thèm trẻ em", "djt tre em", "ma tuy",
   "nigger", "nigga", "niga",
-  
-  // Biến thể leetspeak phổ biến để chặn bypass
   "n18g3r", "n1gg3r", "n1gg4", "n1gga", "nigg3r", "nigg4",
   "n18ga", "n18g4", "p3d0", "p3do", "ped0",
   "l0l1", "l0l!", "sh0t4", "sh0ta", "h3nt41", "h3ntai",
@@ -209,8 +206,7 @@ const bannedWords = [
   "d.u", "d-u", "d_u", "ma túy", "ma tui", "matuy",
   "chech", "chich", "dit", "djt",
   "bu lon", "bu lồn", "bú lon", "bú lồn",
-   ,
-   "đụ má", "duma", "du ma"
+  "đụ má", "duma", "du ma"
 ];
 
 console.log(`✅ Đã load ${bannedWords.length} từ cấm (bao gồm biến thể leetspeak)`);
@@ -260,7 +256,7 @@ client.on("messageCreate", async (message) => {
   const contentLower = message.content.toLowerCase();
   const hasBannedWord = bannedWords.some(word => contentLower.includes(word));
 
-  if (hasBannedWord && userId !== OWNER_ID && !WHITELIST.includes(userId)) {
+  if (hasBannedWord && !OWNER_ID.includes(userId) && !WHITELIST.includes(userId)) {
     let violators = {};
     try { violators = JSON.parse(fs.readFileSync(VIOLATION_FILE, 'utf8')); } catch { violators = {}; }
 
@@ -408,7 +404,7 @@ client.on("messageCreate", async (message) => {
 
   // === LỆNH SETTOP ===
   if (cmd === "settop") {
-    if (userId !== OWNER_ID && !WHITELIST.includes(userId)) {
+    if (!OWNER_ID.includes(userId) && !WHITELIST.includes(userId)) {
       return message.reply(`❌ Tuổi gì đòi set? ID của mày là \`${userId}\` đéo nằm trong hệ thống Whitelist!`);
     }
 
@@ -555,7 +551,7 @@ client.on("guildMemberAdd", (member) => {
 });
 
 // ======================================================
-// CHO PHÉP OWNER THÊM BOT KHÔNG BỊ KICK
+// CHO PHÉP OWNER/WHITELIST THÊM BOT KHÔNG BỊ KICK
 // ======================================================
 client.on("guildMemberAdd", async (member) => {
   if (member.user.bot && !WHITELIST.includes(member.id)) {
@@ -565,8 +561,15 @@ client.on("guildMemberAdd", async (member) => {
         type: 28
       });
       const botAddLog = fetchedLogs.entries.first();
-      if (botAddLog && botAddLog.executor.id === member.guild.ownerId) {
-        console.log(`✅ Bot ${member.user.tag} được Owner thêm vào, bỏ qua kick.`);
+      if (
+        botAddLog &&
+        (
+          botAddLog.executor.id === member.guild.ownerId ||
+          OWNER_ID.includes(botAddLog.executor.id) ||
+          WHITELIST.includes(botAddLog.executor.id)
+        )
+      ) {
+        console.log(`✅ Bot ${member.user.tag} được ${botAddLog.executor.tag} (Owner/Whitelist) thêm vào, bỏ qua kick.`);
         return;
       }
     } catch (err) {
@@ -580,8 +583,7 @@ client.on("guildMemberAdd", async (member) => {
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
   if (interaction.commandName !== "verify") return;
-  if (interaction.commandName !== "grade") return;
-  
+
   const username = interaction.options.getString("username");
   await interaction.deferReply().catch(() => {});
 
