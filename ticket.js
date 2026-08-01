@@ -1,4 +1,4 @@
-// ticket.js - Hệ thống ticket tự động bằng nút bấm (FIX LỖI UNDEFINED)
+// ticket.js - Hệ thống ticket tự động bằng nút bấm (FIX LỖI UNDEFINED VÀ SPAM)
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +9,7 @@ const DATA_FILE = path.join(__dirname, '../ticket_data.json');
 const TICKET_CHANNEL_ID = '1526979564872532069';
 const TICKET_CATEGORY_ID = '';
 const PING_ROLES = ['1525869008862318693', '1525869199379923074', '1525871335354405174', '1525888140211130550'];
-const ADMIN_IDS = ['1517437552213098529'];
+const ADMIN_IDS = ['1517437552213098529', '1146359469945667644'];
 
 // ===== ĐỌC/GHI DATA =====
 function readData() {
@@ -39,15 +39,16 @@ async function sendTicketPanel(client) {
   try {
     const guild = client.guilds.cache.first();
     if (!guild) {
-      console.error('Bot chưa tham gia server nào. Không thể gửi panel.');
+      console.error('❌ Bot chưa tham gia server nào. Không thể gửi panel.');
       return;
     }
     const channel = guild.channels.cache.get(TICKET_CHANNEL_ID);
     if (!channel) {
-      console.error(`Không tìm thấy kênh ID ${TICKET_CHANNEL_ID} trong server ${guild.name}`);
+      console.error(`❌ Không tìm thấy kênh ID ${TICKET_CHANNEL_ID} trong server ${guild.name}`);
       return;
     }
 
+    // Xóa tin nhắn cũ của bot có components
     const messages = await channel.messages.fetch({ limit: 10 });
     for (const msg of messages.values()) {
       if (msg.author.id === client.user.id && msg.components.length > 0) {
@@ -55,6 +56,7 @@ async function sendTicketPanel(client) {
       }
     }
 
+    // ĐÚNG: Embed chỉ dành cho panel, KHÔNG dùng ticketId
     const embed = new EmbedBuilder()
       .setTitle('🎫 TẠO TICKET')
       .setDescription(
@@ -83,15 +85,17 @@ async function sendTicketPanel(client) {
 
 // ===== HÀM XỬ LÝ TẠO TICKET =====
 async function handleCreateTicket(interaction) {
+  // Defer ngay để tránh timeout
+  await interaction.deferReply({ ephemeral: true });
+
   const userId = interaction.user.id;
   const guild = interaction.guild;
 
   const data = readData();
   const count = getTicketCount(userId, data);
   if (count >= 2) {
-    return interaction.reply({
-      content: '❌ Bạn đã có 2 ticket đang mở. Hãy đóng ticket cũ trước khi tạo mới.',
-      ephemeral: true
+    return interaction.editReply({
+      content: '❌ Bạn đã có 2 ticket đang mở. Hãy đóng ticket cũ trước khi tạo mới.'
     });
   }
 
@@ -105,6 +109,7 @@ async function handleCreateTicket(interaction) {
   };
   saveData(data);
 
+  // Tạo kênh ticket
   const channelName = `ticket-${interaction.user.username.toLowerCase()}-${ticketId}`;
   const channelOptions = {
     name: channelName,
@@ -126,6 +131,7 @@ async function handleCreateTicket(interaction) {
   data.tickets[ticketId].channelId = channel.id;
   saveData(data);
 
+  // Nội dung trong kênh ticket
   let pingContent = `<@${userId}>`;
   for (const roleId of PING_ROLES) {
     pingContent += ` <@&${roleId}>`;
@@ -161,9 +167,8 @@ async function handleCreateTicket(interaction) {
     components: [closeRow]
   });
 
-  await interaction.reply({
-    content: `✅ Đã tạo ticket #${ticketId}! Kiểm tra kênh <#${channel.id}>.`,
-    ephemeral: true
+  await interaction.editReply({
+    content: `✅ Đã tạo ticket #${ticketId}! Kiểm tra kênh <#${channel.id}>.`
   });
 }
 
