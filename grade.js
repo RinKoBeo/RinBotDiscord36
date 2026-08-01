@@ -1,63 +1,77 @@
-// grade.js - Lệnh /grade để xem thông tin grade của thành viên
-const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
+// grade.js - Slash command để set grade cho người chơi (chỉ admin)
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
-// ===== CẤU HÌNH THÔNG TIN GRADE (MÀY TỰ SỬA) =====
-// Ở đây tao để ví dụ, mày sửa theo ý mày
-const GRADE_INFO = {
-  // Key là ID user (có thể thêm nhiều)
-  '1517437552213098529': {
-    grade: 'Owner',
-    playstyle: 'Chơi game bằng não, toàn thắng',
-    note: 'Đừng đùa với thằng này'
-  },
-  '895208486743457793': {
-    grade: 'Admin',
-    playstyle: 'Thích đấm nhau, hay chửi',
-    note: 'Cẩn thận kẻo bị ban'
-  },
-  // Thêm các user khác nếu muốn
+// ===== DANH SÁCH GRADE VÀ MÔ TẢ (MÀY TỰ SỬA) =====
+const GRADES = {
+  'S': { name: 'SSS', description: 'Cao thủ huyền thoại' },
+  'A': { name: 'A', description: 'Game thủ chuyên nghiệp' },
+  'B': { name: 'B', description: 'Tay chơi khá' },
+  'C': { name: 'C', description: 'Nghiệp dư' },
+  'D': { name: 'D', description: 'Tập sự' }
 };
 
-// ===== HÀM XỬ LÝ =====
-async function handleGrade(interaction) {
-  const targetUser = interaction.options.getUser('user') || interaction.user;
-  const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-
-  // Lấy thông tin grade từ config hoặc mặc định
-  const info = GRADE_INFO[targetUser.id] || {
-    grade: 'Chưa xếp hạng',
-    playstyle: 'Chưa có dữ liệu',
-    note: 'Hãy chơi nhiều hơn để có đánh giá'
-  };
-
-  const embed = new EmbedBuilder()
-    .setTitle(`📊 THÔNG TIN GRADE CỦA ${targetUser.username}`)
-    .setDescription(
-      `**👤 Người chơi:** ${targetUser}\n` +
-      `**🏷️ Grade:** ${info.grade}\n` +
-      `**🎮 Lối chơi:** ${info.playstyle}\n` +
-      `**📌 Ghi chú:** ${info.note}`
-    )
-    .setColor(0xffffff) // Màu trắng
-    .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
-    .setTimestamp()
-    .setFooter({ text: `ID: ${targetUser.id}` });
-
-  await interaction.reply({ embeds: [embed] });
-}
-
-// ===== REGISTER SLASH COMMAND =====
-const commandData = new SlashCommandBuilder()
-  .setName('grade')
-  .setDescription('Xem thông tin grade và lối chơi của thành viên')
-  .addUserOption(option =>
-    option.setName('user')
-      .setDescription('Người cần xem thông tin (bỏ trống để xem của bạn)')
-      .setRequired(false)
-  );
-
-// ===== EXPORT =====
 module.exports = {
-  data: commandData,
-  execute: handleGrade
+  data: new SlashCommandBuilder()
+    .setName('grade')
+    .setDescription('Set grade cho thành viên (chỉ Admin)')
+    .addUserOption(option =>
+      option.setName('target')
+        .setDescription('Người cần set grade')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('grade')
+        .setDescription('Grade muốn set')
+        .setRequired(true)
+        .addChoices(
+          { name: 'SSS', value: 'S' },
+          { name: 'A', value: 'A' },
+          { name: 'B', value: 'B' },
+          { name: 'C', value: 'C' },
+          { name: 'D', value: 'D' }
+        )
+    )
+    .addStringOption(option =>
+      option.setName('lối_chơi')
+        .setDescription('Mô tả lối chơi (tùy chọn)')
+        .setRequired(false)
+    ),
+
+  async execute(interaction) {
+    // ===== KIỂM TRA QUYỀN ADMIN =====
+    const ADMIN_IDS = ['1517437552213098529']; // 👈 Thêm ID admin vào đây
+    if (!ADMIN_IDS.includes(interaction.user.id)) {
+      return interaction.reply({
+        content: '❌ Mày đéo có quyền dùng lệnh này!',
+        ephemeral: true
+      });
+    }
+
+    const target = interaction.options.getUser('target');
+    const gradeKey = interaction.options.getString('grade');
+    const lốiChơi = interaction.options.getString('lối_chơi') || 'Chưa có mô tả';
+
+    const grade = GRADES[gradeKey];
+    if (!grade) {
+      return interaction.reply({
+        content: '❌ Grade không hợp lệ!',
+        ephemeral: true
+      });
+    }
+
+    // ===== TẠO EMBED THÔNG BÁO =====
+    const embed = new EmbedBuilder()
+      .setTitle('🏅 SET GRADE THÀNH CÔNG')
+      .setDescription(
+        `**Người chơi:** ${target}\n` +
+        `**Grade:** ${grade.name}\n` +
+        `**Mô tả:** ${grade.description}\n` +
+        `**Lối chơi:** ${lốiChơi}`
+      )
+      .setColor(0x00ffcc)
+      .setTimestamp()
+      .setFooter({ text: `Được set bởi ${interaction.user.tag}` });
+
+    await interaction.reply({ embeds: [embed] });
+  }
 };

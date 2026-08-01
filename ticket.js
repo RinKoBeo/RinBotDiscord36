@@ -55,16 +55,21 @@ async function sendTicketPanel(client) {
       }
     }
 
-    const embed = new EmbedBuilder()
-      .setTitle('TAO TICKET')
-      .setDescription(
-        'Huong dan:\n' +
-        'Bam nut "Tao ticket" ben duoi de tao mot ticket moi.\n' +
-        'Moi nguoi chi duoc tao toi da 2 ticket dang mo.\n' +
-        'Admin se xem xet va ho tro ban trong kenh ticket duoc tao.'
-      )
-      .setColor(0xffffff)
-      .setTimestamp();
+      const embed = new EmbedBuilder()
+    .setTitle(`Ticket #${ticketId}`)
+    .setDescription(
+      `Nguoi tao: <@${userId}>\n` +
+      `Trang thai: Dang mo\n` +
+      `Thoi gian: <t:${Math.floor(Date.now()/1000)}:F>\n\n` +
+      `Huong dan:\n` +
+      `Hay mo ta van de cua ban tai day.\n` +
+      `Admin se phan hoi trong kenh nay.\n` +
+      `Hay kien nhan cho Admin phan hoi.\n` +
+      `Ban la ally hay member?\n` +
+      `Ban vao day voi muc dich gi?`
+    )
+    .setColor(0xffffff)
+    .setTimestamp();
 
     const row = new ActionRowBuilder()
       .addComponents(
