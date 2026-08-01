@@ -699,6 +699,6 @@ require("./clear.js")(client);
 require("./ticket.js")(client);
 require("./autorole.js")(client);
 require("./keepalive.js")(client);
-require("./grade.js")(client)
+require("./grade.js")(client);
 // ===== LOGIN =====
 client.login(TOKEN);
