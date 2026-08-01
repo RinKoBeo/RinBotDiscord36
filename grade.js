@@ -6,7 +6,7 @@ const path = require('path');
 const DATA_FILE = path.join(__dirname, '../grade_data.json');
 
 // ===== WHITELIST COPY TỪ INDEX.JS =====
-const WHITELIST = ["1226360140387844167", "895208486743457793", "928258903941210186", "1487337137601773720"];
+const WHITELIST = ["1517437552213098529", "1146359469945667644"];
 
 // ===== ĐỌC/GHI DATA =====
 function readData() {

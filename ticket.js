@@ -1,4 +1,4 @@
-// ticket.js - Hệ thống ticket tự động (fix lỗi gửi 2 bảng, tạo 2 ticket)
+// ticket.js - Hệ thống ticket (fix gửi 2 panel, giới hạn 1 ticket mở)
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -10,9 +10,7 @@ const TICKET_CHANNEL_ID = '1526979564872532069';
 const TICKET_CATEGORY_ID = '';
 const PING_ROLES = ['1525869008862318693', '1525869199379923074', '1525871335354405174', '1525888140211130550'];
 const ADMIN_IDS = ['1517437552213098529'];
-
-// ===== BIẾN CỜ ĐỂ KHÔNG GỬI PANEL 2 LẦN =====
-let panelSent = false;
+const MAX_TICKET_PER_USER = 1; // 👈 Giới hạn 1 ticket mở
 
 // ===== ĐỌC/GHI DATA =====
 function readData() {
@@ -37,30 +35,31 @@ function getTicketCount(userId, data) {
   return count;
 }
 
-// ===== HÀM GỬI PANEL (CHỈ GỬI 1 LẦN) =====
+let panelSent = false; // 👈 Biến cờ để chỉ gửi panel 1 lần
+
+// ===== HÀM GỬI PANEL =====
 async function sendTicketPanel(client) {
-  if (panelSent) {
-    console.log('⚠️ Panel ticket đã được gửi trước đó, bỏ qua.');
-    return;
-  }
+  if (panelSent) return; // 👈 Không gửi lại nếu đã gửi
+  panelSent = true;
 
   try {
     const guild = client.guilds.cache.first();
     if (!guild) {
-      console.error('❌ Bot chưa tham gia server nào. Không thể gửi panel.');
+      console.error('Bot chưa tham gia server nào. Không thể gửi panel.');
       return;
     }
     const channel = guild.channels.cache.get(TICKET_CHANNEL_ID);
     if (!channel) {
-      console.error(`❌ Không tìm thấy kênh ID ${TICKET_CHANNEL_ID} trong server ${guild.name}`);
+      console.error(`Không tìm thấy kênh ID ${TICKET_CHANNEL_ID}`);
       return;
     }
 
-    // Xóa tin nhắn cũ của bot có components (chỉ xóa 1 lần)
+    // Xóa tin nhắn cũ của bot
     const messages = await channel.messages.fetch({ limit: 20 });
-    const botMessages = messages.filter(msg => msg.author.id === client.user.id && msg.components.length > 0);
-    for (const msg of botMessages.values()) {
-      await msg.delete().catch(() => {});
+    for (const msg of messages.values()) {
+      if (msg.author.id === client.user.id) {
+        await msg.delete().catch(() => {});
+      }
     }
 
     const embed = new EmbedBuilder()
@@ -68,7 +67,7 @@ async function sendTicketPanel(client) {
       .setDescription(
         '📌 **Hướng dẫn:**\n' +
         '• Bấm nút **"Tạo ticket"** bên dưới để tạo một ticket mới.\n' +
-        '• Mỗi người chỉ được tạo tối đa **2 ticket** đang mở.\n' +
+        `• Mỗi người chỉ được tạo tối đa **${MAX_TICKET_PER_USER} ticket** đang mở.\n` +
         '• Admin sẽ xem xét và hỗ trợ bạn trong kênh ticket được tạo.'
       )
       .setColor(0xffffff)
@@ -84,102 +83,118 @@ async function sendTicketPanel(client) {
 
     await channel.send({ embeds: [embed], components: [row] });
     console.log('✅ Đã gửi bảng ticket vào kênh:', channel.name);
-    panelSent = true; // Đánh dấu đã gửi
   } catch (error) {
     console.error('❌ Lỗi gửi ticket panel:', error);
   }
 }
 
+// ===== BIẾN KHÓA ĐỂ CHỐNG SPAM CLICK =====
+const creatingTickets = new Set();
+
 // ===== HÀM XỬ LÝ TẠO TICKET =====
 async function handleCreateTicket(interaction) {
-  // Kiểm tra nếu interaction đã được xử lý (tránh duplicate)
-  if (interaction.replied || interaction.deferred) {
-    console.log('⚠️ Interaction đã được xử lý, bỏ qua.');
-    return;
-  }
-
   const userId = interaction.user.id;
-  const guild = interaction.guild;
 
-  const data = readData();
-  const count = getTicketCount(userId, data);
-  if (count >= 2) {
+  // Chống spam click
+  if (creatingTickets.has(userId)) {
     return interaction.reply({
-      content: '❌ Bạn đã có 2 ticket đang mở. Hãy đóng ticket cũ trước khi tạo mới.',
+      content: '⏳ Đang tạo ticket, vui lòng đợi...',
       ephemeral: true
     });
   }
 
-  const ticketId = data.nextId++;
-  data.tickets[ticketId] = {
-    userId: userId,
-    userTag: interaction.user.tag,
-    status: 'open',
-    createdAt: Date.now(),
-    channelId: null
-  };
-  saveData(data);
+  const data = readData();
+  const count = getTicketCount(userId, data);
 
-  const channelName = `ticket-${interaction.user.username.toLowerCase()}-${ticketId}`;
-  const channelOptions = {
-    name: channelName,
-    topic: `Ticket #${ticketId} | Người tạo: ${interaction.user.tag}`,
-    permissionOverwrites: [
-      { id: guild.id, deny: ['ViewChannel'] },
-      { id: userId, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AttachFiles'] },
-      ...ADMIN_IDS.map(id => ({
-        id: id,
-        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels']
-      }))
-    ]
-  };
-  if (TICKET_CATEGORY_ID) {
-    channelOptions.parent = TICKET_CATEGORY_ID;
+  if (count >= MAX_TICKET_PER_USER) {
+    return interaction.reply({
+      content: `❌ Bạn đã có ${count} ticket đang mở. Giới hạn tối đa ${MAX_TICKET_PER_USER} ticket.`,
+      ephemeral: true
+    });
   }
 
-  const channel = await guild.channels.create(channelOptions);
-  data.tickets[ticketId].channelId = channel.id;
-  saveData(data);
+  creatingTickets.add(userId);
+  const guild = interaction.guild;
 
-  let pingContent = `<@${userId}>`;
-  for (const roleId of PING_ROLES) {
-    pingContent += ` <@&${roleId}>`;
+  try {
+    const ticketId = data.nextId++;
+    data.tickets[ticketId] = {
+      userId: userId,
+      userTag: interaction.user.tag,
+      status: 'open',
+      createdAt: Date.now(),
+      channelId: null
+    };
+    saveData(data);
+
+    const channelName = `ticket-${interaction.user.username.toLowerCase()}-${ticketId}`;
+    const channelOptions = {
+      name: channelName,
+      topic: `Ticket #${ticketId} | Người tạo: ${interaction.user.tag}`,
+      permissionOverwrites: [
+        { id: guild.id, deny: ['ViewChannel'] },
+        { id: userId, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AttachFiles'] },
+        ...ADMIN_IDS.map(id => ({
+          id: id,
+          allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels']
+        }))
+      ]
+    };
+    if (TICKET_CATEGORY_ID) {
+      channelOptions.parent = TICKET_CATEGORY_ID;
+    }
+
+    const channel = await guild.channels.create(channelOptions);
+    data.tickets[ticketId].channelId = channel.id;
+    saveData(data);
+
+    let pingContent = `<@${userId}>`;
+    for (const roleId of PING_ROLES) {
+      pingContent += ` <@&${roleId}>`;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`🎫 Ticket #${ticketId}`)
+      .setDescription(
+        `👤 **Người tạo:** <@${userId}>\n` +
+        `📌 **Trạng thái:** 🟢 Đang mở\n` +
+        `⏰ **Thời gian:** <t:${Math.floor(Date.now()/1000)}:F>\n\n` +
+        `📝 **Hướng dẫn:**\n` +
+        `• Hãy mô tả vấn đề của bạn tại đây.\n` +
+        `• Admin sẽ phản hồi trong kênh này.\n` +
+        `• Hãy kiên nhẫn chờ Admin phản hồi.`
+      )
+      .setColor(0xffffff)
+      .setTimestamp();
+
+    const closeRow = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId(`ticket_close_${ticketId}`)
+          .setLabel('🔒 Đóng ticket')
+          .setStyle(ButtonStyle.Danger)
+      );
+
+    await channel.send({
+      content: pingContent,
+      embeds: [embed],
+      components: [closeRow]
+    });
+
+    await interaction.reply({
+      content: `✅ Đã tạo ticket #${ticketId}! Kiểm tra kênh <#${channel.id}>.`,
+      ephemeral: true
+    });
+
+  } catch (error) {
+    console.error('❌ Lỗi tạo ticket:', error);
+    await interaction.reply({
+      content: '❌ Có lỗi xảy ra khi tạo ticket. Thử lại sau.',
+      ephemeral: true
+    });
+  } finally {
+    creatingTickets.delete(userId);
   }
-
-  const embed = new EmbedBuilder()
-    .setTitle(`🎫 Ticket #${ticketId}`)
-    .setDescription(
-      `👤 **Người tạo:** <@${userId}>\n` +
-      `📌 **Trạng thái:** 🟢 Đang mở\n` +
-      `⏰ **Thời gian:** <t:${Math.floor(Date.now()/1000)}:F>\n\n` +
-      `📝 **Hướng dẫn:**\n` +
-      `• Hãy mô tả vấn đề của bạn tại đây.\n` +
-      `• Admin sẽ phản hồi trong kênh này.\n` +
-      `• Hãy kiên nhẫn chờ Admin phản hồi.\n` +
-      `• Bạn là ally hay member?\n` +
-      `• Bạn vào đây với mục đích gì?`
-    )
-    .setColor(0xffffff)
-    .setTimestamp();
-
-  const closeRow = new ActionRowBuilder()
-    .addComponents(
-      new ButtonBuilder()
-        .setCustomId(`ticket_close_${ticketId}`)
-        .setLabel('🔒 Đóng ticket')
-        .setStyle(ButtonStyle.Danger)
-    );
-
-  await channel.send({
-    content: pingContent,
-    embeds: [embed],
-    components: [closeRow]
-  });
-
-  await interaction.reply({
-    content: `✅ Đã tạo ticket #${ticketId}! Kiểm tra kênh <#${channel.id}>.`,
-    ephemeral: true
-  });
 }
 
 // ===== XÓA TICKET =====
@@ -263,15 +278,13 @@ async function handleCloseTicket(interaction, ticketId) {
 
 // ===== EXPORT =====
 module.exports = async function(client) {
-  // Đảm bảo chỉ gửi panel 1 lần khi bot ready
   client.once('ready', async () => {
-    // Đợi 3s để cache server và kênh
+    // Đợi 3s để cache guild, chỉ gửi 1 lần
     setTimeout(async () => {
       await sendTicketPanel(client);
     }, 3000);
   });
 
-  // Xử lý interaction (button)
   client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
     if (!interaction.customId.startsWith('ticket_')) return;
