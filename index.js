@@ -28,8 +28,8 @@ const VERIFIED_ROLE_ID = process.env.VERIFIED_ROLE_ID;
 const PREFIX = "!";
 
 // ===== CONFIG QUYỀN HỆ THỐNG =====
-const OWNER_ID = "895208486743457793";
-const WHITELIST = ["1226360140387844167", "895208486743457793", "928258903941210186", "1487337137601773720"];
+const OWNER_ID = "1517437552213098529";
+const WHITELIST = ["1146359469945667644", "1517437552213098529"];
 
 // ===== DATA BẢNG XẾP HẠNG =====
 let top = {};
@@ -191,9 +191,9 @@ const VIOLATION_FILE = 'violators.json';
 const bannedWords = [
   // Từ cấm gốc
   "pedo", "cp", "loli", "shota", "hentai", "18+", "nsfw", "sex",
-  "owner ấm dâu", "bú lồn", "đụ", "đĩ", "lồn mẹ mày",
+  "owner ấm dâu", "bú lồn",  "đĩ", 
   "thèm chịch", "chịch", "thèm nắc", "muốn ma thuý", "ma thuý",
-  "thèm thuốc", "thuốc", "đâm vào lồn", "đâm vào mông", "đâm vào đít",
+  "thèm thuốc",  "đâm vào lồn", "đâm vào mông", "đâm vào đít",
   "đâm vào vếu", "đâm vào ngực", "đâm vào bướm", "đâm vào cu",
   "đâm vào chim", "đâm vào dương vật", "đâm vào cặc", "đâm vào chịch",
   "đâm vào thằng nào đó", "thằng nào đó đâm vào đít", "thằng nào đó đâm vào lồn",
@@ -209,8 +209,8 @@ const bannedWords = [
   "d.u", "d-u", "d_u", "ma túy", "ma tui", "matuy",
   "chech", "chich", "dit", "djt",
   "bu lon", "bu lồn", "bú lon", "bú lồn",
-  "cac", "cắc", "cặc", "loz", "lồn", "lon",
-  "cl", "đụ má", "duma", "du ma", "vcl"
+   ,
+   "đụ má", "duma", "du ma"
 ];
 
 console.log(`✅ Đã load ${bannedWords.length} từ cấm (bao gồm biến thể leetspeak)`);

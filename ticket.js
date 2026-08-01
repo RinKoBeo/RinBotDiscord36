@@ -141,6 +141,8 @@ async function handleCreateTicket(interaction) {
       `Hay mo ta van de cua ban tai day.\n` +
       `Admin se phan hoi trong kenh nay.\n` +
       `Hay kien nhan cho Admin phan hoi.`
+      `ban la ally hay member?.`
+      `ban vao day voi muc dich gi?.`
     )
     .setColor(0xffffff)
     .setTimestamp();
