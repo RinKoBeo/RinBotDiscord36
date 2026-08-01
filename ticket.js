@@ -2,25 +2,21 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const DATA_FILE = path.join(__dirname, '../ticket_data.json');
+const LOCK_FILE = path.join(__dirname, '../ticket_creating.lock');
 const TICKET_CHANNEL_ID = '1526979564872532069';
 const TICKET_CATEGORY_ID = '';
 const PING_ROLES = ['1525869008862318693', '1525869199379923074', '1525871335354405174', '1525888140211130550'];
 const ADMIN_IDS = ['1517437552213098529'];
 
-let panelMessageId = null; // Luu ID tin nhan panel de khong gui trung
+// ID rieng cho lan chay nay cua process -> dung de phat hien neu co 2 process
+// cung chay (se thay 2 INSTANCE_ID khac nhau trong log cung mot luc bam nut)
+const INSTANCE_ID = crypto.randomBytes(3).toString('hex');
+console.log(`[ticket.js] Instance khoi tao: ${INSTANCE_ID} | PID: ${process.pid} | Thoi gian: ${new Date().toISOString()}`);
 
-// Chong xu ly trung 1 interaction (phong khi event ban ra 2 lan / listener bi gan trung)
-const handledInteractions = new Set();
-function markHandled(id) {
-  handledInteractions.add(id);
-  // don dep sau 15s de khong phinh bo nho
-  setTimeout(() => handledInteractions.delete(id), 15000);
-}
-
-// Chong bam nut "Tao ticket" lien tuc / spam trong luc dang xu ly
-const creatingUsers = new Set();
+let panelMessageId = null;
 
 function readData() {
   if (!fs.existsSync(DATA_FILE)) return { tickets: {}, nextId: 1 };
@@ -42,6 +38,32 @@ function getTicketCount(userId, data) {
     }
   }
   return count;
+}
+
+// ===== KHOA FILE CHONG TAO TRUNG (atomic, chiu duoc ca truong hop
+// listener bi gan trung trong CUNG 1 process lan LAN CAN nhieu process
+// neu chung dung chung 1 o dia) =====
+function acquireLock(userId) {
+  try {
+    // 'wx' = tao file moi, that bai neu file da ton tai -> atomic o muc OS
+    const fd = fs.openSync(LOCK_FILE + '.' + userId, 'wx');
+    fs.closeSync(fd);
+    return true;
+  } catch (e) {
+    return false; // file da ton tai -> dang co 1 request khac giu khoa
+  }
+}
+function releaseLock(userId) {
+  try { fs.unlinkSync(LOCK_FILE + '.' + userId); } catch {}
+}
+// Don rac: neu bot crash giua chung ma khong giai phong khoa, khoa se tu
+// het han sau 20s de khong bi ket vinh vien
+function cleanupStaleLock(userId) {
+  try {
+    const p = LOCK_FILE + '.' + userId;
+    const stat = fs.statSync(p);
+    if (Date.now() - stat.mtimeMs > 20000) fs.unlinkSync(p);
+  } catch {}
 }
 
 // ===== GUI PANEL (CHI 1 LAN) =====
@@ -87,9 +109,9 @@ async function sendTicketPanel(client) {
 
     const sent = await channel.send({ embeds: [embed], components: [row] });
     panelMessageId = sent.id;
-    console.log('Da gui bang ticket vao kenh:', channel.name);
+    console.log(`[${INSTANCE_ID}] Da gui bang ticket vao kenh:`, channel.name);
   } catch (error) {
-    console.error('Loi gui ticket panel:', error);
+    console.error(`[${INSTANCE_ID}] Loi gui ticket panel:`, error);
   }
 }
 
@@ -98,17 +120,20 @@ async function handleCreateTicket(interaction) {
   const userId = interaction.user.id;
   const guild = interaction.guild;
 
-  // Chan spam-click: neu user nay dang co 1 lan tao ticket chua xong thi bo qua
-  if (creatingUsers.has(userId)) {
+  console.log(`[${INSTANCE_ID}] Nhan click Tao ticket | user=${userId} | interactionId=${interaction.id} | luc=${new Date().toISOString()}`);
+
+  cleanupStaleLock(userId);
+  if (!acquireLock(userId)) {
+    console.warn(`[${INSTANCE_ID}] BI CHAN: user ${userId} dang co 1 yeu cau tao ticket khac chay roi (interactionId=${interaction.id})`);
     return interaction.reply({
-      content: 'Yeu cau tao ticket cua ban dang duoc xu ly, vui long doi...',
+      content: 'Yeu cau tao ticket cua ban dang duoc xu ly, vui long doi vai giay...',
       ephemeral: true
     }).catch(() => {});
   }
-  creatingUsers.add(userId);
 
-  // Ack ngay trong 3 giay dau tien de tranh loi "khong phan hoi kip"
-  await interaction.deferReply({ ephemeral: true }).catch(() => {});
+  await interaction.deferReply({ ephemeral: true }).catch((e) => {
+    console.error(`[${INSTANCE_ID}] Loi deferReply:`, e.message);
+  });
 
   try {
     const data = readData();
@@ -127,8 +152,9 @@ async function handleCreateTicket(interaction) {
       createdAt: Date.now(),
       channelId: null
     };
-    // Ghi ngay nextId/ticket de lan bam tiep theo (neu co) khong bi trung ID
     saveData(data);
+
+    console.log(`[${INSTANCE_ID}] Dang tao channel cho ticket #${ticketId} | user=${userId} | interactionId=${interaction.id}`);
 
     const channelName = `ticket-${interaction.user.username.toLowerCase()}-${ticketId}`;
     const channelOptions = {
@@ -186,20 +212,24 @@ async function handleCreateTicket(interaction) {
       components: [closeRow]
     });
 
+    console.log(`[${INSTANCE_ID}] DA TAO XONG ticket #${ticketId} | channel=${channel.id} | interactionId=${interaction.id}`);
+
     await interaction.editReply({
       content: `Da tao ticket #${ticketId}! Kiem tra kenh <#${channel.id}>.`
     });
   } catch (error) {
-    console.error('Loi tao ticket:', error);
+    console.error(`[${INSTANCE_ID}] Loi tao ticket:`, error);
     await interaction.editReply({ content: 'Co loi xay ra khi tao ticket, vui long thu lai.' }).catch(() => {});
   } finally {
-    creatingUsers.delete(userId);
+    releaseLock(userId);
   }
 }
 
 // ===== XOA TICKET =====
 async function handleDeleteTicket(interaction, ticketId) {
-  await interaction.deferReply({ ephemeral: true }).catch(() => {});
+  await interaction.deferReply({ ephemeral: true }).catch((e) => {
+    console.error(`[${INSTANCE_ID}] Loi deferReply (delete):`, e.message);
+  });
   try {
     const data = readData();
     const ticket = data.tickets[ticketId];
@@ -217,14 +247,16 @@ async function handleDeleteTicket(interaction, ticketId) {
       await channel.delete(`Ticket #${ticketId} da bi xoa boi ${interaction.user.tag}`).catch(() => {});
     }
   } catch (error) {
-    console.error('Loi xoa ticket:', error);
+    console.error(`[${INSTANCE_ID}] Loi xoa ticket:`, error);
     await interaction.editReply({ content: 'Co loi xay ra khi xoa ticket.' }).catch(() => {});
   }
 }
 
 // ===== DONG TICKET =====
 async function handleCloseTicket(interaction, ticketId) {
-  await interaction.deferReply({ ephemeral: true }).catch(() => {});
+  await interaction.deferReply({ ephemeral: true }).catch((e) => {
+    console.error(`[${INSTANCE_ID}] Loi deferReply (close):`, e.message);
+  });
   try {
     const data = readData();
     const ticket = data.tickets[ticketId];
@@ -275,20 +307,15 @@ async function handleCloseTicket(interaction, ticketId) {
 
     await interaction.editReply({ content: `Da dong ticket #${ticketId}.` });
   } catch (error) {
-    console.error('Loi dong ticket:', error);
+    console.error(`[${INSTANCE_ID}] Loi dong ticket:`, error);
     await interaction.editReply({ content: 'Co loi xay ra khi dong ticket.' }).catch(() => {});
   }
 }
 
 // ===== EXPORT =====
 module.exports = async function(client) {
-  // CHONG GAN LISTENER TRUNG: neu module nay lo bi require/goi nhieu lan
-  // (vd file index.js require 2 lan, hoac code reload) thi cac listener cu
-  // se cong don lai -> 1 lan bam nut se chay handler nhieu lan -> tao ra
-  // nhieu ticket cung luc va gay loi "khong phan hoi kip" do tranh chap
-  // interaction.reply(). Dat co flag tren chinh client de chan viec nay.
   if (client._ticketModuleLoaded) {
-    console.warn('[ticket.js] Module da duoc load truoc do, bo qua de tranh gan trung listener.');
+    console.warn(`[${INSTANCE_ID}] [ticket.js] Module da duoc load truoc do trong CUNG 1 process nay, bo qua de tranh gan trung listener.`);
     return;
   }
   client._ticketModuleLoaded = true;
@@ -307,10 +334,6 @@ module.exports = async function(client) {
   client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
     if (!interaction.customId.startsWith('ticket_')) return;
-
-    // Neu vi ly do nao do interaction nay da duoc xu ly roi thi bo qua
-    if (handledInteractions.has(interaction.id)) return;
-    markHandled(interaction.id);
 
     const parts = interaction.customId.split('_');
     const action = parts[1];
