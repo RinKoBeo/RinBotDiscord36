@@ -1,5 +1,5 @@
-// grade.js - Slash command quản lý grade, play style và role (chỉ WHITELIST set được)
-const { SlashCommandBuilder, EmbedBuilder, REST, Routes } = require('discord.js');
+// grade.js - Prefix command !grade với modal nhập thông tin
+const { EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -17,125 +17,22 @@ function saveData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-module.exports = async function(client) {
-  // ===== ĐĂNG KÝ SLASH COMMAND =====
-  client.once('ready', async () => {
-    try {
-      const command = new SlashCommandBuilder()
-        .setName('grade')
-        .setDescription('Quản lý grade, play style và role của người chơi')
-        .addSubcommand(sub => sub
-          .setName('set')
-          .setDescription('Đặt grade, play style và role (role không bắt buộc)')
-          .addUserOption(opt => opt
-            .setName('user')
-            .setDescription('Người chơi cần set (mặc định là bạn)')
-          )
-          .addStringOption(opt => opt
-            .setName('grade')
-            .setDescription('Grade của người chơi')
-            .setRequired(true)
-          )
-          .addStringOption(opt => opt
-            .setName('style')
-            .setDescription('Play style')
-            .setRequired(true)
-          )
-          .addStringOption(opt => opt
-            .setName('role')
-            .setDescription('ID role hoặc tên role (không bắt buộc)')
-            .setRequired(false)
-          )
-        )
-        .addSubcommand(sub => sub
-          .setName('view')
-          .setDescription('Xem grade, play style và role của người chơi')
-          .addUserOption(opt => opt
-            .setName('user')
-            .setDescription('Người chơi cần xem (mặc định là bạn)')
-          )
-        );
+module.exports = function(client) {
+  // ===== XỬ LÝ TIN NHẮN =====
+  client.on('messageCreate', async (message) => {
+    if (message.author.bot || !message.guild) return;
+    if (!message.content.startsWith('!grade')) return;
 
-      const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-      await rest.put(
-        Routes.applicationCommands(client.user.id),
-        { body: [command.toJSON()] }
-      );
-      console.log('✅ Đã đăng ký slash command /grade');
-    } catch (err) {
-      console.error('❌ Lỗi đăng ký /grade:', err);
-    }
-  });
-
-  // ===== XỬ LÝ INTERACTION =====
-  client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-    if (interaction.commandName !== 'grade') return;
-
-    await interaction.deferReply({ ephemeral: true });
-
-    const sub = interaction.options.getSubcommand();
-    const targetUser = interaction.options.getUser('user') || interaction.user;
-    const userId = targetUser.id;
-
-    const data = readData();
-    if (!data[userId]) data[userId] = { grade: 'Chưa có', style: 'Chưa có', role: null };
-
-    // ===== SET =====
-    if (sub === 'set') {
-      const grade = interaction.options.getString('grade');
-      const style = interaction.options.getString('style');
-      const roleInput = interaction.options.getString('role'); // có thể null
-
-      // Kiểm tra quyền: set cho người khác cần WHITELIST
-      if (targetUser.id !== interaction.user.id && !WHITELIST.includes(interaction.user.id)) {
-        return interaction.editReply({ content: '❌ Mày đéo có quyền set grade cho người khác!' });
-      }
-
-      // Lưu dữ liệu
-      data[userId] = { grade, style, role: roleInput || null };
-      saveData(data);
-
-      // Nếu có roleInput và là set cho người khác, cố gắng gán role
-      let roleAssigned = '';
-      if (roleInput && targetUser.id !== interaction.user.id) {
-        try {
-          const guild = interaction.guild;
-          const member = await guild.members.fetch(targetUser.id);
-          // Tìm role theo ID hoặc tên
-          let role = guild.roles.cache.get(roleInput);
-          if (!role) {
-            role = guild.roles.cache.find(r => r.name.toLowerCase() === roleInput.toLowerCase());
-          }
-          if (role) {
-            await member.roles.add(role);
-            roleAssigned = `\n✅ Đã gán role **${role.name}** cho <@${targetUser.id}>.`;
-          } else {
-            roleAssigned = `\n⚠️ Không tìm thấy role **${roleInput}**, chỉ lưu thông tin.`;
-          }
-        } catch (err) {
-          roleAssigned = `\n⚠️ Lỗi gán role: ${err.message}`;
-        }
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle('✅ Đã cập nhật thông tin')
-        .setDescription(
-          `**Người chơi:** ${targetUser}\n` +
-          `**Grade:** ${grade}\n` +
-          `**Play Style:** ${style}\n` +
-          `**Role:** ${roleInput || 'Không có'}` +
-          roleAssigned
-        )
-        .setColor(0xffffff)
-        .setTimestamp();
-
-      return interaction.editReply({ embeds: [embed] });
-    }
+    const args = message.content.slice(6).trim().split(/ +/);
+    const subCmd = args[0]?.toLowerCase();
 
     // ===== VIEW =====
-    if (sub === 'view') {
-      const info = data[userId];
+    if (subCmd === 'view') {
+      const targetUser = message.mentions.users.first() || message.author;
+      const userId = targetUser.id;
+      const data = readData();
+      const info = data[userId] || { grade: 'Chưa có', style: 'Chưa có', role: 'Không có' };
+
       const embed = new EmbedBuilder()
         .setTitle(`📋 Thông tin của ${targetUser.username}`)
         .setDescription(
@@ -146,7 +43,124 @@ module.exports = async function(client) {
         .setColor(0xffffff)
         .setTimestamp();
 
-      return interaction.editReply({ embeds: [embed] });
+      return message.reply({ embeds: [embed] });
     }
+
+    // ===== SET =====
+    if (subCmd === 'set') {
+      const targetUser = message.mentions.users.first();
+      if (!targetUser) {
+        return message.reply('❌ Tag thằng cần set grade: `!grade set @Tên`');
+      }
+
+      // Kiểm tra whitelist nếu set cho người khác
+      if (targetUser.id !== message.author.id && !WHITELIST.includes(message.author.id)) {
+        return message.reply('❌ Mày đéo có quyền set grade cho người khác!');
+      }
+
+      // Mở modal nhập thông tin
+      const modal = new ModalBuilder()
+        .setCustomId(`grade_modal_${targetUser.id}_${message.author.id}`)
+        .setTitle(`Set grade cho ${targetUser.username}`);
+
+      const gradeInput = new TextInputBuilder()
+        .setCustomId('grade')
+        .setLabel('Grade')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('VD: Đồng, Bạc, Vàng, Bạch Kim...')
+        .setRequired(true);
+
+      const styleInput = new TextInputBuilder()
+        .setCustomId('style')
+        .setLabel('Play Style')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('VD: Tank, Support, Carry, Roam...')
+        .setRequired(true);
+
+      const roleInput = new TextInputBuilder()
+        .setCustomId('role')
+        .setLabel('Role (không bắt buộc)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('VD: ID role hoặc tên role')
+        .setRequired(false);
+
+      const row1 = new ActionRowBuilder().addComponents(gradeInput);
+      const row2 = new ActionRowBuilder().addComponents(styleInput);
+      const row3 = new ActionRowBuilder().addComponents(roleInput);
+      modal.addComponents(row1, row2, row3);
+
+      await message.showModal(modal);
+      return;
+    }
+
+    // ===== HELP =====
+    if (!subCmd || subCmd === 'help') {
+      return message.reply(
+        `📖 **HƯỚNG DẪN GRADE**\n` +
+        `• \`!grade view @user\` - Xem grade của người đó (mặc định là bạn)\n` +
+        `• \`!grade set @user\` - Set grade (hiện bảng nhập)\n` +
+        `• Chỉ WHITELIST mới set được cho người khác`
+      );
+    }
+
+    return message.reply('❌ Lệnh sai! Dùng `!grade help` để xem hướng dẫn.');
+  });
+
+  // ===== XỬ LÝ MODAL SUBMIT =====
+  client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isModalSubmit()) return;
+    if (!interaction.customId.startsWith('grade_modal_')) return;
+
+    const parts = interaction.customId.split('_');
+    const targetId = parts[2];
+    const authorId = parts[3];
+
+    // Kiểm tra người gửi modal
+    if (interaction.user.id !== authorId) {
+      return interaction.reply({ content: '❌ Mày đéo phải người mở modal này!', ephemeral: true });
+    }
+
+    const grade = interaction.fields.getTextInputValue('grade');
+    const style = interaction.fields.getTextInputValue('style');
+    const roleInput = interaction.fields.getTextInputValue('role') || null;
+
+    const data = readData();
+    data[targetId] = { grade, style, role: roleInput };
+    saveData(data);
+
+    // Gán role nếu có
+    let roleAssigned = '';
+    if (roleInput && targetId !== interaction.user.id) {
+      try {
+        const guild = interaction.guild;
+        const member = await guild.members.fetch(targetId);
+        let role = guild.roles.cache.get(roleInput);
+        if (!role) {
+          role = guild.roles.cache.find(r => r.name.toLowerCase() === roleInput.toLowerCase());
+        }
+        if (role) {
+          await member.roles.add(role);
+          roleAssigned = `\n✅ Đã gán role **${role.name}** cho <@${targetId}>.`;
+        } else {
+          roleAssigned = `\n⚠️ Không tìm thấy role **${roleInput}**, chỉ lưu thông tin.`;
+        }
+      } catch (err) {
+        roleAssigned = `\n⚠️ Lỗi gán role: ${err.message}`;
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('✅ Đã cập nhật thông tin')
+      .setDescription(
+        `**Người chơi:** <@${targetId}>\n` +
+        `**Grade:** ${grade}\n` +
+        `**Play Style:** ${style}\n` +
+        `**Role:** ${roleInput || 'Không có'}` +
+        roleAssigned
+      )
+      .setColor(0xffffff)
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
   });
 };
