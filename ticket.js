@@ -1,17 +1,17 @@
-// ticket.js - Hệ thống ticket (không emoji, fix lỗi tạo 2 ticket)
+// ticket.js - He thong ticket don gian, khong emoji, khong loi
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
 const DATA_FILE = path.join(__dirname, '../ticket_data.json');
 
-// ===== CẤU HÌNH =====
+// ===== CAU HINH =====
 const TICKET_CHANNEL_ID = '1526979564872532069';
 const TICKET_CATEGORY_ID = '';
 const PING_ROLES = ['1525869008862318693', '1525869199379923074', '1525871335354405174', '1525888140211130550'];
 const ADMIN_IDS = ['1517437552213098529'];
 
-// ===== ĐỌC/GHI DATA =====
+// ===== DOC/GHI DATA =====
 function readData() {
   if (!fs.existsSync(DATA_FILE)) return { tickets: {}, nextId: 1 };
   try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch { return { tickets: {}, nextId: 1 }; }
@@ -34,25 +34,28 @@ function getTicketCount(userId, data) {
   return count;
 }
 
-// ===== GỬI PANEL =====
+// ===== GUI PANEL (CHI 1 LAN) =====
+let panelSent = false;
+
 async function sendTicketPanel(client) {
+  if (panelSent) return;
   try {
     const guild = client.guilds.cache.first();
     if (!guild) {
-      console.error('Bot chưa tham gia server nào.');
+      console.error('Bot chua tham gia server nao.');
       return;
     }
     const channel = guild.channels.cache.get(TICKET_CHANNEL_ID);
     if (!channel) {
-      console.error(`Không tìm thấy kênh ${TICKET_CHANNEL_ID}`);
+      console.error(`Khong tim thay kenh ${TICKET_CHANNEL_ID}`);
       return;
     }
 
-    // Xóa tin nhắn cũ của bot có components
-    const messages = await channel.messages.fetch({ limit: 20 });
-    const botMessages = messages.filter(msg => msg.author.id === client.user.id && msg.components.length > 0);
-    for (const msg of botMessages.values()) {
-      await msg.delete().catch(() => {});
+    const messages = await channel.messages.fetch({ limit: 10 });
+    for (const msg of messages.values()) {
+      if (msg.author.id === client.user.id && msg.components.length > 0) {
+        await msg.delete().catch(() => {});
+      }
     }
 
     const embed = new EmbedBuilder()
@@ -75,13 +78,14 @@ async function sendTicketPanel(client) {
       );
 
     await channel.send({ embeds: [embed], components: [row] });
-    console.log('Da gui panel ticket vao kenh:', channel.name);
+    panelSent = true;
+    console.log('Da gui bang ticket vao kenh:', channel.name);
   } catch (error) {
     console.error('Loi gui ticket panel:', error);
   }
 }
 
-// ===== TẠO TICKET =====
+// ===== XU LY TAO TICKET =====
 async function handleCreateTicket(interaction) {
   const userId = interaction.user.id;
   const guild = interaction.guild;
@@ -95,7 +99,6 @@ async function handleCreateTicket(interaction) {
     });
   }
 
-  // Tạo ticket mới
   const ticketId = data.nextId++;
   data.tickets[ticketId] = {
     userId: userId,
@@ -106,7 +109,6 @@ async function handleCreateTicket(interaction) {
   };
   saveData(data);
 
-  // Tạo kênh ticket
   const channelName = `ticket-${interaction.user.username.toLowerCase()}-${ticketId}`;
   const channelOptions = {
     name: channelName,
@@ -128,13 +130,11 @@ async function handleCreateTicket(interaction) {
   data.tickets[ticketId].channelId = channel.id;
   saveData(data);
 
-  // Ping
   let pingContent = `<@${userId}>`;
   for (const roleId of PING_ROLES) {
     pingContent += ` <@&${roleId}>`;
   }
 
-  // Embed ticket (không emoji, giữ nguyên câu hỏi cũ)
   const embed = new EmbedBuilder()
     .setTitle(`Ticket #${ticketId}`)
     .setDescription(
@@ -171,7 +171,7 @@ async function handleCreateTicket(interaction) {
   });
 }
 
-// ===== XÓA TICKET =====
+// ===== XOA TICKET =====
 async function handleDeleteTicket(interaction, ticketId) {
   const data = readData();
   const ticket = data.tickets[ticketId];
@@ -179,23 +179,26 @@ async function handleDeleteTicket(interaction, ticketId) {
     return interaction.reply({ content: 'Khong tim thay ticket!', ephemeral: true });
   }
 
+  // Xoa du lieu
   delete data.tickets[ticketId];
   saveData(data);
 
+  // Reply truoc
   await interaction.reply({
     content: `Da xoa ticket #${ticketId} va du lieu.`,
     ephemeral: true
   });
 
+  // Xoa kenh sau
   const channel = interaction.guild.channels.cache.get(ticket.channelId);
   if (channel) {
     await channel.delete(`Ticket #${ticketId} da bi xoa boi ${interaction.user.tag}`).catch(() => {});
   } else {
-    console.log(`Kenh ticket #${ticketId} khong ton tai, chi xoa du lieu.`);
+    console.log(`Kenh ticket #${ticketId} khong ton tai.`);
   }
 }
 
-// ===== ĐÓNG TICKET =====
+// ===== DONG TICKET =====
 async function handleCloseTicket(interaction, ticketId) {
   const data = readData();
   const ticket = data.tickets[ticketId];
@@ -255,7 +258,7 @@ module.exports = async function(client) {
   client.once('ready', async () => {
     setTimeout(async () => {
       await sendTicketPanel(client);
-    }, 3000);
+    }, 2000);
   });
 
   client.on('interactionCreate', async (interaction) => {
