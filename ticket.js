@@ -1,4 +1,4 @@
-// ticket.js - He thong ticket tu dong bang nut bam (khong emoji, fix loi)
+// ticket.js - He thong ticket tu dong bang nut bam (khong emoji, fix loi embed)
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -131,6 +131,7 @@ async function handleCreateTicket(interaction) {
     pingContent += ` <@&${roleId}>`;
   }
 
+  // Sửa lại embed: viết đúng cú pháp với dấu cộng và không bị lỗi
   const embed = new EmbedBuilder()
     .setTitle(`Ticket #${ticketId}`)
     .setDescription(
@@ -140,9 +141,9 @@ async function handleCreateTicket(interaction) {
       `Huong dan:\n` +
       `Hay mo ta van de cua ban tai day.\n` +
       `Admin se phan hoi trong kenh nay.\n` +
-      `Hay kien nhan cho Admin phan hoi.`
-      `ban la ally hay member?.`
-      `ban vao day voi muc dich gi?.`
+      `Hay kien nhan cho Admin phan hoi.\n` +
+      `Ban la ally hay member?.\n` +
+      `Ban vao day voi muc dich gi?.`
     )
     .setColor(0xffffff)
     .setTimestamp();

@@ -580,7 +580,8 @@ client.on("guildMemberAdd", async (member) => {
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
   if (interaction.commandName !== "verify") return;
-
+  if (interaction.commandName !== "grade") return;
+  
   const username = interaction.options.getString("username");
   await interaction.deferReply().catch(() => {});
 
@@ -698,6 +699,6 @@ require("./clear.js")(client);
 require("./ticket.js")(client);
 require("./autorole.js")(client);
 require("./keepalive.js")(client);
-
+require("./grade.js")(client);
 // ===== LOGIN =====
 client.login(TOKEN);
