@@ -41,7 +41,7 @@ const TOP_ADMIN_IDS = [
 // De trong ("") neu chua muon dung tinh nang bang tu dong, /top van dung binh thuong.
 const TOP_BOARD_CHANNEL_ID = "";
 // Anh mac dinh khi chua set anh rieng cho 1 top - thay bang link catbox cua ban
-const DEFAULT_TOP_IMAGE = "https://files.catbox.moe/THAY_LINK_ANH_CUA_BAN_O_DAY.png";
+const DEFAULT_TOP_IMAGE = "https://files.catbox.moe/5tnr82.gif";
 const TOP_BOARD_FILE = "top_board.json";
 
 // ===== DATA BẢNG XẾP HẠNG =====
