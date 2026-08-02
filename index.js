@@ -309,7 +309,7 @@ client.once("ready", async () => {
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
   await rest.put(
-    Routes.applicationCommands(client.user.id),
+    Routes.applicationGuildCommands(client.user.id, "1525856288444125197"),
     { body: commands }
   ).catch(err => console.error("Loi load lenh Slash:", err.message));
 
@@ -843,6 +843,6 @@ require("./warn.js")(client);
 require("./taophong.js")(client);
 require("./wellcome.js")(client);
 require("./autorole.js")(client);
-require("./rankset.js")(client);
+require("./rankset.js")(client, TOP_ADMIN_IDS);
 // ===== LOGIN =====
 client.login(TOKEN);
