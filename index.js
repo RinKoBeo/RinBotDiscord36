@@ -313,6 +313,13 @@ client.once("ready", async () => {
     { body: commands }
   ).catch(err => console.error("Loi load lenh Slash:", err.message));
 
+  // Xoa sach bo lenh GLOBAL cu (neu con sot lai tu truoc), tranh bi hien trung
+  // voi bo lenh GUILD moi vua dang ky o tren
+  await rest.put(
+    Routes.applicationCommands(client.user.id),
+    { body: [] }
+  ).catch(err => console.error("Loi xoa lenh global cu:", err.message));
+
   console.log("Slash command loaded");
 
   // Dam bao ca 5 bang TOP deu co san tin nhan trong kenh rieng cua no ngay tu luc bot online
