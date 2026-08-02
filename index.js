@@ -388,7 +388,7 @@ client.on("messageCreate", async (message) => {
         .setThumbnail(user.displayAvatarURL({ dynamic: true }))
         .setImage(avatar[0]?.imageUrl || null)
         .setColor(0x00AE86)
-        .setFooter({ text: `Roblox ID: ${rbUserId} | Hệ thống FGS` })
+        .setFooter({ text: `Roblox ID: ${rbUserId} | Hệ thống VOL` })
         .setTimestamp();
 
       if (attachment) {
@@ -437,7 +437,7 @@ client.on("messageCreate", async (message) => {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle("🏆 BXH FGS - TOP SERVER")
+      .setTitle("🏆 BXH VOL - TOP SERVER")
       .setDescription(desc)
       .setColor(0xffcc00)
       .setThumbnail("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcGd0ZGhxd2J0dXVnM29vYTllcHgzdTc1ajAyNHVkZXJuemRpbWw4NSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/oEPyO83kEnoyfwmewB/giphy.gif")
