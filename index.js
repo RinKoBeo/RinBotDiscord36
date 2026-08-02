@@ -50,7 +50,6 @@ const TOP_BOARD_CHANNELS = [
 
 // Anh mac dinh khi chua set anh rieng cho 1 top
 const DEFAULT_TOP_IMAGE = "https://files.catbox.moe/2ts8cx.jpg";
-const TOP_BOARD_FILE = "top_board.json";
 
 // ===== DATA BẢNG XẾP HẠNG (5 bang, moi bang co 10 vi tri rieng) =====
 // Cau truc: top["1"][1] = {...}, top["1"][2] = {...}, ..., top["5"][10] = {...}
@@ -125,6 +124,21 @@ function buildTopEmbeds(boardKey) {
 
 // Cap nhat "bang top song" trong dung kenh rieng cua bang do - tu tao moi neu chua co,
 // hoac SUA lai tin nhan cu neu da ton tai (khong spam tin nhan moi moi lan settop)
+//
+// LUU Y: Render xoa sach o dia moi lan deploy lai, nen KHONG dua vao file
+// top_board.json de nho ID tin nhan cu (se mat sau moi lan deploy). Thay vao
+// do, moi lan can sua bang, bot tu quet lai 20 tin nhan gan nhat trong kenh,
+// tim dung tin nhan CU CUA CHINH NO (co dung 10 embed) de sua, khong tao moi.
+async function findOldBoardMessage(channel, client) {
+  try {
+    const messages = await channel.messages.fetch({ limit: 20 });
+    const found = messages.find(m => m.author.id === client.user.id && m.embeds.length === 10);
+    return found || null;
+  } catch {
+    return null;
+  }
+}
+
 async function updateTopBoard(client, boardNumber) {
   const channelId = TOP_BOARD_CHANNELS[boardNumber - 1];
   if (!channelId) return;
@@ -137,29 +151,22 @@ async function updateTopBoard(client, boardNumber) {
 
     const embeds = buildTopEmbeds(String(boardNumber));
 
-    let boardInfo = {};
-    try { boardInfo = JSON.parse(fs.readFileSync(TOP_BOARD_FILE, 'utf8')); } catch {}
-
-    const savedMsgId = boardInfo[String(boardNumber)];
-    if (savedMsgId) {
-      try {
-        const oldMsg = await channel.messages.fetch(savedMsgId);
-        await oldMsg.edit({ embeds });
-        return;
-      } catch {
-        // tin nhan cu khong con ton tai (bi xoa tay) -> gui moi ben duoi
-      }
+    const oldMsg = await findOldBoardMessage(channel, client);
+    if (oldMsg) {
+      await oldMsg.edit({ embeds }).catch(async () => {
+        await channel.send({ embeds });
+      });
+      return;
     }
 
-    const sent = await channel.send({ embeds });
-    boardInfo[String(boardNumber)] = sent.id;
-    fs.writeFileSync(TOP_BOARD_FILE, JSON.stringify(boardInfo, null, 2));
+    await channel.send({ embeds });
   } catch (err) {
     console.error("Loi cap nhat bang top:", err.message);
   }
 }
 
 // Khi bot vua khoi dong, dam bao ca 5 bang deu da co san tin nhan trong kenh cua no
+// (se tu tim va sua lai tin nhan cu neu co, khong tao moi)
 async function initAllTopBoards(client) {
   for (let b = 1; b <= 5; b++) {
     await updateTopBoard(client, b);
@@ -284,6 +291,18 @@ client.once("ready", async () => {
       .setDescription("Xem 1 bang xep hang TOP 1-10")
       .addIntegerOption(option =>
         option.setName("bang").setDescription("Bang TOP (1-5)").setRequired(true).setMinValue(1).setMaxValue(5)
+      ),
+    new SlashCommandBuilder()
+      .setName("rankset")
+      .setDescription("Gan rank cho 1 nguoi")
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi duoc gan rank").setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName("rank").setDescription("Rank muon gan").setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName("dieuchinh").setDescription("Ghi chu them (vd: Mid, High, Low)").setRequired(false)
       )
   ].map(cmd => cmd.toJSON());
 
@@ -824,5 +843,6 @@ require("./warn.js")(client);
 require("./taophong.js")(client);
 require("./wellcome.js")(client);
 require("./autorole.js")(client);
+require("./rankset.js")(client);
 // ===== LOGIN =====
 client.login(TOKEN);
