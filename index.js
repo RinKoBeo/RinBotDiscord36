@@ -31,16 +31,95 @@ const PREFIX = "!";
 const OWNER_ID = ["1517437552213098529" ,"1146359469945667644"];
 const WHITELIST = ["1146359469945667644", "1517437552213098529"];
 
+// ===== CONFIG RIÊNG CHO HỆ THỐNG TOP MỚI =====
+// Dan cac ID Discord duoc phep dung lenh /settop vao day, cach nhau bang dau phay
+const TOP_ADMIN_IDS = [
+  "1517437552213098529",
+  "1146359469945667644"
+  // "ID_KHAC_O_DAY",
+];
+// ID kenh se hien "bang top song" tu dong cap nhat moi khi /settop duoc dung.
+// De trong ("") neu chua muon dung tinh nang bang tu dong, /top van dung binh thuong.
+const TOP_BOARD_CHANNEL_ID = "";
+// Anh mac dinh khi chua set anh rieng cho 1 top - thay bang link catbox cua ban
+const DEFAULT_TOP_IMAGE = "https://files.catbox.moe/THAY_LINK_ANH_CUA_BAN_O_DAY.png";
+const TOP_BOARD_FILE = "top_board.json";
+
 // ===== DATA BẢNG XẾP HẠNG =====
 let top = {};
 try {
-  top = JSON.parse(fs.readFileSync('top.json', 'utf8'));
+  const rawTop = JSON.parse(fs.readFileSync('top.json', 'utf8'));
+  for (let i = 1; i <= 10; i++) {
+    const val = rawTop[i];
+    if (val && typeof val === 'object') {
+      top[i] = val;
+    } else if (val) {
+      // du lieu cu chi luu userId dang string -> chuyen sang dinh dang moi
+      top[i] = { userId: val, country: "", rank: "", image: DEFAULT_TOP_IMAGE };
+    } else {
+      top[i] = null;
+    }
+  }
 } catch {
   for (let i = 1; i <= 10; i++) top[i] = null;
 }
 
 function saveTop() {
   fs.writeFileSync('top.json', JSON.stringify(top, null, 2));
+}
+
+// Tao 10 embed rieng biet cho 10 vi tri TOP (mau trang, khong emoji)
+function buildTopEmbeds() {
+  const embeds = [];
+  for (let i = 1; i <= 10; i++) {
+    const entry = top[i];
+    const embed = new EmbedBuilder()
+      .setTitle(`TOP ${i}`)
+      .setColor(0xffffff);
+
+    if (entry && entry.userId) {
+      embed.setDescription(
+        `<@${entry.userId}>\n` +
+        `Country: ${entry.country || "Chua co"}\n` +
+        `Rank: ${entry.rank || "Chua co"}`
+      );
+      embed.setImage(entry.image || DEFAULT_TOP_IMAGE);
+    } else {
+      embed.setDescription("Chua co du lieu");
+    }
+    embeds.push(embed);
+  }
+  return embeds;
+}
+
+// Cap nhat "bang top song" trong kenh co dinh - tu tao moi neu chua co,
+// hoac edit lai tin nhan cu neu da ton tai (khong spam tin nhan moi)
+async function updateTopBoard(client) {
+  if (!TOP_BOARD_CHANNEL_ID) return;
+  try {
+    const channel = client.channels.cache.get(TOP_BOARD_CHANNEL_ID);
+    if (!channel) return;
+
+    const embeds = buildTopEmbeds();
+
+    let boardInfo = {};
+    try { boardInfo = JSON.parse(fs.readFileSync(TOP_BOARD_FILE, 'utf8')); } catch {}
+
+    if (boardInfo.messageId) {
+      try {
+        const oldMsg = await channel.messages.fetch(boardInfo.messageId);
+        await oldMsg.edit({ embeds });
+        return;
+      } catch {
+        // tin nhan cu khong con ton tai -> gui moi ben duoi
+      }
+    }
+
+    const sent = await channel.send({ embeds });
+    fs.writeFileSync(TOP_BOARD_FILE, JSON.stringify({ messageId: sent.id }, null, 2));
+  } catch (err) {
+    console.error("Loi cap nhat bang top:", err.message);
+  }
 }
 
 // ===== ANTI NUKE CONFIG =====
@@ -105,7 +184,7 @@ async function lockServer(guild) {
   try {
     await guild.roles.everyone.setPermissions(["ViewChannel"]);
     const ch = guild.channels.cache.get(LOG_CHANNEL_ID);
-    if (ch) ch.send("🔒 Server đã bị LOCK do nghi ngờ phá!");
+    if (ch) ch.send("Server da bi LOCK do nghi ngo pha!");
   } catch {}
 }
 
@@ -120,13 +199,13 @@ async function punish(guild, userId, reason) {
     await member.ban({ reason: "AntiNuke: " + reason }).catch(() => {});
     await lockServer(guild);
     const ch = guild.channels.cache.get(LOG_CHANNEL_ID);
-    if (ch) ch.send(`🚨 <@${userId}> bị BAN | Lý do: ${reason}`);
+    if (ch) ch.send(`<@${userId}> bi BAN | Ly do: ${reason}`);
   } catch {}
 }
 
 // ===== SỰ KIỆN READY =====
 client.once("ready", async () => {
-  console.log(`✅ Bot online: ${client.user.tag}`);
+  console.log(`Bot online: ${client.user.tag}`);
 
   const commands = [
     new SlashCommandBuilder()
@@ -134,7 +213,28 @@ client.once("ready", async () => {
       .setDescription("Verify Roblox")
       .addStringOption(option =>
         option.setName("username").setDescription("username roblox").setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName("settop")
+      .setDescription("Set 1 vi tri trong bang TOP")
+      .addIntegerOption(option =>
+        option.setName("vitri").setDescription("Vi tri TOP (1-10)").setRequired(true).setMinValue(1).setMaxValue(10)
       )
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi duoc set vao vi tri nay").setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName("quocgia").setDescription("Quoc gia").setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName("rank").setDescription("Rank trong game").setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName("anh").setDescription("Link anh (bo trong se dung anh mac dinh)").setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName("top")
+      .setDescription("Xem bang xep hang TOP 1-10")
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -142,9 +242,9 @@ client.once("ready", async () => {
   await rest.put(
     Routes.applicationCommands(client.user.id),
     { body: commands }
-  ).catch(err => console.error("❌ Lỗi load lệnh Slash:", err.message));
+  ).catch(err => console.error("Loi load lenh Slash:", err.message));
 
-  console.log("✅ Slash command loaded");
+  console.log("Slash command loaded");
 
   const ID_SERVER_CỦA_MÀY = "1525856288444125197"; 
   const ID_PHÒNG_VOICE_MUỐN_BOT_NGỒI = "1505850307765080194"; 
@@ -161,14 +261,14 @@ client.once("ready", async () => {
           selfMute: false, 
           selfDeaf: true   
         });
-        console.log(`🤖 [VOICE 24/7] Rin đã ngồi phòng voice: ${voiceChannel.name}`);
+        console.log(`[VOICE 24/7] Rin da ngoi phong voice: ${voiceChannel.name}`);
       }
     }
   } catch (voiceFetchErr) {
-    console.error("❌ Lỗi luồng fetch voice ready:", voiceFetchErr.message);
+    console.error("Loi luong fetch voice ready:", voiceFetchErr.message);
   }
   
-  console.log("🤖 AI shevdev đã sẵn sàng!");
+  console.log("AI shevdev da san sang!");
 }); 
 
 // ===== HÀM PARSE THỜI GIAN =====
@@ -209,7 +309,7 @@ const bannedWords = [
   "đụ má", "duma", "du ma"
 ];
 
-console.log(`✅ Đã load ${bannedWords.length} từ cấm (bao gồm biến thể leetspeak)`);
+console.log(`Da load ${bannedWords.length} tu cam (bao gom bien the leetspeak)`);
 
 // ============================================================
 // SỰ KIỆN TIN NHẮN
@@ -226,12 +326,12 @@ client.on("messageCreate", async (message) => {
 
   if (isPinged) {
     const replies = [
-      `${message.author} Không quan trọng bảo bối là ai, nhưng nếu PING quá nhiều em sẽ thuộc quyền sở hữu của anh mất 😔`,
-      `${message.author} ping ít thôi không là e sẽ trở thành của anh ấyy mất thôi~ 😭`,
-      `${message.author} đang làm phiền tổng tài mất rồi  😭`,
-      `${message.author} có biết là mình đang ping Rin quá nhiều không hả 😔`,
+      `${message.author} Không quan trọng bảo bối là ai, nhưng nếu PING quá nhiều em sẽ thuộc quyền sở hữu của anh mất`,
+      `${message.author} ping ít thôi không là e sẽ trở thành của anh ấyy mất thôi~`,
+      `${message.author} đang làm phiền tổng tài mất rồi`,
+      `${message.author} có biết là mình đang ping Rin quá nhiều không hả`,
       `${message.author} này cô bé~~ , e có bt là đang ping tổng tài quá nhiều không hả `,
-      `${message.author} ping nhiều thế này thì e sẽ bị Rin bắt làm nô lệ đấy 😭`,
+      `${message.author} ping nhiều thế này thì e sẽ bị Rin bắt làm nô lệ đấy`,
       `${message.author}  e sẽ bị bỏ rơi nếu cứ ping anh chàng tài sắc vẹn toàn này`
     ];
     const random = replies[Math.floor(Math.random() * replies.length)];
@@ -247,7 +347,7 @@ client.on("messageCreate", async (message) => {
     try {
       await message.member.timeout(100000).catch(() => {});
       const ch = message.guild.channels.cache.get(LOG_CHANNEL_ID);
-      if (ch) ch.send(`🚨 ${message.author.tag} spam quá nhiều`);
+      if (ch) ch.send(`${message.author.tag} spam qua nhieu`);
       return; 
     } catch {}
   }
@@ -270,19 +370,19 @@ client.on("messageCreate", async (message) => {
     if (count === 1) {
       if (message.member.moderatable) {
         await message.member.timeout(3600000, "Vi phạm từ ngữ cấm (Lần 1)").catch(() => {});
-        return message.channel.send(`⚠️ <@${userId}> bị **MUTE 1 GIỜ** vì phát ngôn từ ngữ cấm (Lần 1/3).`).catch(() => {});
+        return message.channel.send(`<@${userId}> bi MUTE 1 GIO vi phat ngon tu ngu cam (Lan 1/3).`).catch(() => {});
       }
     } else if (count === 2) {
       if (message.member.moderatable) {
         await message.member.timeout(86400000, "Vi phạm từ ngữ cấm (Lần 2)").catch(() => {});
-        return message.channel.send(`🚨 <@${userId}> bị **MUTE 24 GIỜ** vì tái phạm từ ngữ cấm (Lần 2/3).`).catch(() => {});
+        return message.channel.send(`<@${userId}> bi MUTE 24 GIO vi tai pham tu ngu cam (Lan 2/3).`).catch(() => {});
       }
     } else if (count >= 3) {
       if (message.member.kickable) {
         await message.member.kick("Vi phạm từ ngữ cấm quá 3 lần").catch(() => {});
         violators[userId] = 0;
         fs.writeFileSync(VIOLATION_FILE, JSON.stringify(violators, null, 2));
-        return message.channel.send(`🔨 Thằng súc vật <@${userId}> đã bị **KICK** khỏi server vì vi phạm từ ngữ cấm đến lần thứ 3!`).catch(() => {});
+        return message.channel.send(`<@${userId}> da bi KICK khoi server vi vi pham tu ngu cam den lan thu 3!`).catch(() => {});
       }
     }
     return; 
@@ -300,7 +400,7 @@ client.on("messageCreate", async (message) => {
       await message.reply(reply);
     } catch (error) {
       console.error("Lỗi AI:", error);
-      await message.reply("❌ RIN AI đang bận, thử lại sau nhé!");
+      await message.reply("RIN AI đang bận, thử lại sau nhé!");
     }
     return;
   }
@@ -314,13 +414,13 @@ client.on("messageCreate", async (message) => {
 
   // === LỆNH GÕ CỬA ===
   if (cmd === "gocua" || cmd === "ping") {
-    return message.reply("🚪 Cửa đã mở! Bot Rin vẫn online chạy tẹt ga nha ní!").catch(() => {});
+    return message.reply("Cửa đã mở! Bot Rin vẫn online chạy tẹt ga nha ní!").catch(() => {});
   }
 
   // === LỆNH INFO ROBLOX ===
   if (cmd === "info") {
     const username = args[0];
-    if (!username) return message.reply("🛑 Nhập tên user roblox cần check ní ơi!");
+    if (!username) return message.reply("Nhập tên user roblox cần check ní ơi!");
     const user = message.mentions.users.first() || message.author;
 
     try {
@@ -335,7 +435,7 @@ client.on("messageCreate", async (message) => {
       const remainingDays = diffDays % 365;
       let ageString = diffYears > 0 ? `${diffYears} năm ${remainingDays} ngày trước` : `${diffDays} ngày trước`;
 
-      let friendsListString = "❌ Không có hoặc tài khoản riêng tư";
+      let friendsListString = "Không có hoặc tài khoản riêng tư";
       let attachment = null; 
 
       try {
@@ -346,8 +446,8 @@ client.on("messageCreate", async (message) => {
           
           if (validFriends.length > 0) {
             const limitFriends = validFriends.slice(0, 4); 
-            const friendsLines = limitFriends.map((f, index) => `👤 **${index + 1}.** ${f.displayName ? `${f.displayName}` : f.name}`).join(" | ");
-            friendsListString = `👥 **Tổng số bạn:** ${totalFriends} người\n**✨ Bạn thân đại diện:** ${friendsLines}`;
+            const friendsLines = limitFriends.map((f, index) => `${index + 1}. ${f.displayName ? `${f.displayName}` : f.name}`).join(" | ");
+            friendsListString = `Tổng số bạn: ${totalFriends} người\nBạn thân đại diện: ${friendsLines}`;
 
             const friendIds = limitFriends.map(f => f.id).filter(id => id !== undefined && id !== null);
             if (friendIds.length > 0) {
@@ -372,18 +472,18 @@ client.on("messageCreate", async (message) => {
           }
         }
       } catch (friendErr) {
-        friendsListString = "🔒 Không thể kiểm tra bạn bè (Danh sách bị ẩn)";
+        friendsListString = "Không thể kiểm tra bạn bè (Danh sách bị ẩn)";
       }
 
       const embed = new EmbedBuilder()
-        .setTitle("📋 THÔNG TIN TÀI KHOẢN ROBLOX")
+        .setTitle("THÔNG TIN TÀI KHOẢN ROBLOX")
         .addFields(
-          { name: "✨ Tên Trong Game (Display)", value: `**${playerInfo.displayName || "Không có"}**`, inline: true },
-          { name: "👤 Tên Đăng Nhập (User)", value: `\`${playerInfo.username || username}\``, inline: true },
-          { name: "💬 Người Check (Discord)", value: `${user.username}`, inline: true },
-          { name: "📅 Ngày Tạo Acc", value: `📅 ${joinDate.toLocaleDateString('vi-VN')} (${ageString})`, inline: false },
-          { name: "📝 Mô Tả Bản Thân (Bio)", value: `\`\`\`text\n${playerInfo.blurb || "Trống trơn"}\n\`\`\``, inline: false },
-          { name: "👥 Danh Sách Bạn Bè", value: friendsListString, inline: false }
+          { name: "Tên Trong Game (Display)", value: `${playerInfo.displayName || "Không có"}`, inline: true },
+          { name: "Tên Đăng Nhập (User)", value: `${playerInfo.username || username}`, inline: true },
+          { name: "Người Check (Discord)", value: `${user.username}`, inline: true },
+          { name: "Ngày Tạo Acc", value: `${joinDate.toLocaleDateString('vi-VN')} (${ageString})`, inline: false },
+          { name: "Mô Tả Bản Thân (Bio)", value: `${playerInfo.blurb || "Trống trơn"}`, inline: false },
+          { name: "Danh Sách Bạn Bè", value: friendsListString, inline: false }
         )
         .setThumbnail(user.displayAvatarURL({ dynamic: true }))
         .setImage(avatar[0]?.imageUrl || null)
@@ -398,97 +498,51 @@ client.on("messageCreate", async (message) => {
       }
     } catch (err) {
       console.error(err);
-      message.reply("❌ Không tìm thấy user Roblox hoặc hệ thống gặp lỗi rồi ní ơi!").catch(() => {});
+      message.reply("Không tìm thấy user Roblox hoặc hệ thống gặp lỗi rồi ní ơi!").catch(() => {});
     }
-  }
-
-  // === LỆNH SETTOP ===
-  if (cmd === "settop") {
-    if (!OWNER_ID.includes(userId) && !WHITELIST.includes(userId)) {
-      return message.reply(`❌ Tuổi gì đòi set? ID của mày là \`${userId}\` đéo nằm trong hệ thống Whitelist!`);
-    }
-
-    const topNumber = parseInt(args[0]); 
-    const targetMember = message.mentions.members.first() || args[1]; 
-
-    if (isNaN(topNumber) || topNumber < 1 || topNumber > 10) {
-      return message.reply("❌ Số thứ tự TOP phải từ 1 đến 10! VD: `!settop 1 @Ringada` ");
-    }
-
-    if (!targetMember) return message.reply("❌ Tag thiếu người cần set top kìa khứa.");
-
-    const targetId = typeof targetMember === "string" ? targetMember : targetMember.id;
-    top[topNumber] = targetId;
-    saveTop(); 
-
-    return message.reply(`✅ Xác nhận quyền lực! Đã đưa <@${targetId}> vào vị trí **TOP ${topNumber}**!`);
-  }
-
-  // === LỆNH TOP ===
-  if (cmd === "top") {
-    let desc = '';
-    for (let i = 1; i <= 10; i++) {
-      let line = '';
-      if (i === 1) line = `👑 **TOP 1** → ${top[i] ? `<@${top[i]}>` : 'Chưa có'} 🔥`;
-      else if (i === 2) line = `🥈 TOP 2 → ${top[i] ? `<@${top[i]}>` : 'Chưa có'}`;
-      else if (i === 3) line = `🥉 TOP 3 → ${top[i] ? `<@${top[i]}>` : 'Chưa có'}`;
-      else line = `🔹 TOP ${i} → ${top[i] ? `<@${top[i]}>` : 'Chưa có'}`;
-      desc += line + "\n";
-    }
-
-    const embed = new EmbedBuilder()
-      .setTitle("🏆 BXH VOL - TOP SERVER")
-      .setDescription(desc)
-      .setColor(0xffcc00)
-      .setThumbnail("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcGd0ZGhxd2J0dXVnM29vYTllcHgzdTc1ajAyNHVkZXJuemRpbWw4NSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/oEPyO83kEnoyfwmewB/giphy.gif")
-      .setImage("https://media.giphy.com/media/v1.Y2lkPTc5MGI3KA11d2JidXdieXhiNWMzeDVpajNlZ3d3aDZja21ic2IxcGh2cjNzdWJ1eSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/QSwBid1bso4h5ePFnN/giphy.gif")
-      .setFooter({ text: "🔥 Top sẽ thay đổi do Rin set" })
-      .setTimestamp();
-
-    message.channel.send({ embeds: [embed] }).catch(() => {});
   }
 
   // === CÁC LỆNH QUẢN LÝ ===
   if (cmd === "kick") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.KickMembers)) return message.reply("❌ Đéo có Trình.");
-    if (!member) return message.reply("❌ Tag thg cần kick.");
-    if (!member.kickable) return message.reply("❌ Đéo thể kick người này.");
-    try { await member.kick(); message.reply(`✅ Đã kick ${member.user.tag}`); } catch { message.reply("❌ Kick Đéo đc."); }
+    if (!message.member.permissions.has(PermissionsBitField.Flags.KickMembers)) return message.reply("Đéo có Trình.");
+    if (!member) return message.reply("Tag thg cần kick.");
+    if (!member.kickable) return message.reply("Đéo thể kick người này.");
+    try { await member.kick(); message.reply(`Đã kick ${member.user.tag}`); } catch { message.reply("Kick Đéo đc."); }
   }
 
   if (cmd === "ban") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers)) return message.reply("❌ Đéo có Trình.");
-    if (!member) return message.reply("❌ Tag thg cần ban.");
-    if (!member.bannable) return message.reply("❌ Đéo thể ban người này.");
-    try { await member.ban(); message.reply(`🔨 Đã ban ${member.user.tag}`); } catch { message.reply("❌ Ban Đéo đc."); }
+    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers)) return message.reply("Đéo có Trình.");
+    if (!member) return message.reply("Tag thg cần ban.");
+    if (!member.bannable) return message.reply("Đéo thể ban người này.");
+    try { await member.ban(); message.reply(`Đã ban ${member.user.tag}`); } catch { message.reply("Ban Đéo đc."); }
   }
 
   if (cmd === "unban") {
     const userIdToUnban = args[0]; 
-    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers)) return message.reply("❌ Đéo có Trình.");
-    if (!userIdToUnban) return message.reply("❌ Nhập ID của thằng cần unban!");
+    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers)) return message.reply("Đéo có Trình.");
+    if (!userIdToUnban) return message.reply("Nhập ID của thằng cần unban!");
     try {
       const banList = await message.guild.bans.fetch();
-      if (!banList.has(userIdToUnban)) return message.reply("❌ Thằng này có bị ban đéo đâu?");
+      if (!banList.has(userIdToUnban)) return message.reply("Thằng này có bị ban đéo đâu?");
       await message.guild.members.unban(userIdToUnban);
-      message.reply(`🔓 Đã gỡ ban cho khứa mang ID: \`${userIdToUnban}\`!`);
-    } catch { message.reply("❌ Unban Đéo đc."); }
+      message.reply(`Đã gỡ ban cho khứa mang ID: ${userIdToUnban}!`);
+    } catch { message.reply("Unban Đéo đc."); }
   }
 
   if (cmd === "mute") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return message.reply("❌ Đéo Đủ Trình.");
+    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return message.reply("Đéo Đủ Trình.");
     const timeArg = args[1];
-    if (!member) return message.reply("❌ Tag thg cần timeout.");
-    if (!timeArg) return message.reply("❌ Nhập mẫu: 10s, 5m, 2h");
+    if (!member) return message.reply("Tag thg cần timeout.");
+    if (!timeArg) return message.reply("Nhập mẫu: 10s, 5m, 2h");
     const duration = parseTime(timeArg);
-    if (!duration || !member.moderatable) return message.reply("❌ Sai cú pháp hoặc đéo bóp họng được nó.");
-    try { await member.timeout(duration); message.reply(`🔇 ${member.user.tag} Câm Mồm!! ${timeArg}`); } catch { message.reply("❌ Mute thất bại."); }
+    if (!duration || !member.moderatable) return message.reply("Sai cú pháp hoặc đéo bóp họng được nó.");
+    try { await member.timeout(duration); message.reply(`${member.user.tag} Câm Mồm!! ${timeArg}`); } catch { message.reply("Mute thất bại."); }
   }
 
   if (cmd === "unmute") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return message.reply("❌ Đéo Đủ Trình.");
-    if (!member) return message.reply("❌ Tag thg cần gỡ.");
-    try { await member.timeout(null); message.reply(`✅ ${member.user.tag} đã hết mute`); } catch { message.reply("❌ Lỗi gỡ mute."); }
+    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return message.reply("Đéo Đủ Trình.");
+    if (!member) return message.reply("Tag thg cần gỡ.");
+    try { await member.timeout(null); message.reply(`${member.user.tag} đã hết mute`); } catch { message.reply("Lỗi gỡ mute."); }
   }
 
   await thongbao(message, args, cmd).catch(() => {});
@@ -569,50 +623,80 @@ client.on("guildMemberAdd", async (member) => {
           WHITELIST.includes(botAddLog.executor.id)
         )
       ) {
-        console.log(`✅ Bot ${member.user.tag} được ${botAddLog.executor.tag} (Owner/Whitelist) thêm vào, bỏ qua kick.`);
+        console.log(`Bot ${member.user.tag} duoc ${botAddLog.executor.tag} (Owner/Whitelist) them vao, bo qua kick.`);
         return;
       }
     } catch (err) {
-      console.error("❌ Lỗi fetch audit log khi thêm bot:", err.message);
+      console.error("Loi fetch audit log khi them bot:", err.message);
     }
     await member.ban({ reason: "Bot lạ nhập cư trái phép" }).catch(() => {});
   }
 });
 
-// ===== SLASH COMMAND VERIFY =====
+// ===== SLASH COMMANDS: VERIFY / SETTOP / TOP =====
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName !== "verify") return;
 
-  const username = interaction.options.getString("username");
-  await interaction.deferReply().catch(() => {});
+  // ----- /verify -----
+  if (interaction.commandName === "verify") {
+    const username = interaction.options.getString("username");
+    await interaction.deferReply().catch(() => {});
 
-  try {
-    const userId = await noblox.getIdFromUsername(username);
-    const avatar = await noblox.getPlayerThumbnail(userId,"420x420","png",false,"headshot");
+    try {
+      const userId = await noblox.getIdFromUsername(username);
+      const avatar = await noblox.getPlayerThumbnail(userId,"420x420","png",false,"headshot");
 
-    const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-    if (!member) return;
-    await member.setNickname(username).catch(() => {});
+      const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+      if (!member) return;
+      await member.setNickname(username).catch(() => {});
 
-    if (VERIFIED_ROLE_ID) await member.roles.add(VERIFIED_ROLE_ID).catch(() => {});
+      if (VERIFIED_ROLE_ID) await member.roles.add(VERIFIED_ROLE_ID).catch(() => {});
 
-    await interaction.editReply({ content: `✅ Verify thành công!: ${username}` }).catch(() => {});
+      await interaction.editReply({ content: `Verify thanh cong!: ${username}` }).catch(() => {});
 
-    const channel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-    if (!channel) return;
+      const channel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
+      if (!channel) return;
 
-    const embed = new EmbedBuilder()
-      .setAuthor({ name: username, iconURL: avatar[0].imageUrl })
-      .setTitle("Member Updated")
-      .addFields({ name: "Nickname", value: `${username} (@${interaction.user.username})` })
-      .setThumbnail(avatar[0].imageUrl)
-      .setColor("Green")
-      .setTimestamp();
+      const embed = new EmbedBuilder()
+        .setAuthor({ name: username, iconURL: avatar[0].imageUrl })
+        .setTitle("Member Updated")
+        .addFields({ name: "Nickname", value: `${username} (@${interaction.user.username})` })
+        .setThumbnail(avatar[0].imageUrl)
+        .setColor("Green")
+        .setTimestamp();
 
-    channel.send({ embeds: [embed] }).catch(() => {});
-  } catch {
-    await interaction.editReply({ content: "❌ Username Roblox đéo tồn tại!" }).catch(() => {});
+      channel.send({ embeds: [embed] }).catch(() => {});
+    } catch {
+      await interaction.editReply({ content: "Username Roblox khong ton tai!" }).catch(() => {});
+    }
+    return;
+  }
+
+  // ----- /settop -----
+  if (interaction.commandName === "settop") {
+    if (!TOP_ADMIN_IDS.includes(interaction.user.id)) {
+      return interaction.reply({ content: "Ban khong co quyen dung lenh nay!", ephemeral: true });
+    }
+
+    const vitri = interaction.options.getInteger("vitri");
+    const nguoi = interaction.options.getUser("nguoi");
+    const quocgia = interaction.options.getString("quocgia");
+    const rank = interaction.options.getString("rank");
+    const anh = interaction.options.getString("anh") || DEFAULT_TOP_IMAGE;
+
+    top[vitri] = { userId: nguoi.id, country: quocgia, rank: rank, image: anh };
+    saveTop();
+
+    await interaction.reply({ content: `Da cap nhat TOP ${vitri} cho <@${nguoi.id}>`, ephemeral: true }).catch(() => {});
+    await updateTopBoard(client);
+    return;
+  }
+
+  // ----- /top -----
+  if (interaction.commandName === "top") {
+    const embeds = buildTopEmbeds();
+    await interaction.reply({ embeds }).catch(() => {});
+    return;
   }
 });
 
@@ -627,7 +711,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       const guild = newState.guild;
 
       const newChannel = await guild.channels.create({
-        name: `🎤 Room của ${member.user.username}`,
+        name: `Room cua ${member.user.username}`,
         type: 2, 
         parent: newState.channel?.parentId || null, 
         permissionOverwrites: [
@@ -650,7 +734,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       }
     }
   } catch (err) {
-    console.error("❌ Lỗi sập luồng tạo Voice:", err.message);
+    console.error("Loi sap luong tao Voice:", err.message);
   }
 });
 
@@ -666,25 +750,14 @@ app.get("/", (req, res) => {
 app.get("/api/top", (req, res) => {
   try {
     const currentTop = JSON.parse(fs.readFileSync('top.json', 'utf8'));
-    
-    let webTopData = [];
-    for (let i = 1; i <= 10; i++) {
-      const userId = currentTop[i];
-      const userObj = userId ? client.users.cache.get(userId) : null;
-      webTopData.push({
-        rank: i,
-        userId: userId || "Chưa có",
-        username: userObj ? userObj.username : "Ẩn danh / Chưa có"
-      });
-    }
-    res.json(webTopData);
+    res.json(currentTop);
   } catch {
     res.status(500).json({ error: "Không thể lấy dữ liệu BXH" });
   }
 });
 
 app.listen(WEB_PORT, () => {
-  console.log(`🌐 [WEB] Website của Rin đang chạy tại: http://localhost:${WEB_PORT}`);
+  console.log(`[WEB] Website cua Rin dang chay tai: http://localhost:${WEB_PORT}`);
 });
 
 // ===== CÁC MODULE CON =====
