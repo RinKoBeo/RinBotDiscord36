@@ -761,19 +761,13 @@ app.listen(WEB_PORT, () => {
 });
 
 // ===== CÁC MODULE CON =====
-require("./video.js")(client);
 require("./unlock.js")(client);
-require("./help.js")(client);
 require("./lock.js")(client);
 require("./music.js")(client);
 require("./logger.js")(client);
 require("./warn.js")(client);
 require("./taophong.js")(client);
 require("./wellcome.js")(client);
-require("./clear.js")(client);
-require("./ticket.js")(client);
 require("./autorole.js")(client);
-require("./keepalive.js")(client);
-require("./grade.js")(client);
 // ===== LOGIN =====
 client.login(TOKEN);
