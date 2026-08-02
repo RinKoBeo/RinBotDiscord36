@@ -15,7 +15,6 @@ const {
 const { joinVoiceChannel } = require("@discordjs/voice"); 
 const noblox = require("noblox.js");
 const fs = require("fs");
-const thongbao = require("./thongbao");
 const shevdev = require("shevdev");
 
 const express = require("express");
@@ -545,7 +544,6 @@ client.on("messageCreate", async (message) => {
     try { await member.timeout(null); message.reply(`${member.user.tag} đã hết mute`); } catch { message.reply("Lỗi gỡ mute."); }
   }
 
-  await thongbao(message, args, cmd).catch(() => {});
 });
 
 // ============================================================
@@ -763,7 +761,6 @@ app.listen(WEB_PORT, () => {
 // ===== CÁC MODULE CON =====
 require("./unlock.js")(client);
 require("./lock.js")(client);
-require("./music.js")(client);
 require("./logger.js")(client);
 require("./warn.js")(client);
 require("./taophong.js")(client);
