@@ -77,7 +77,6 @@ const { EmbedBuilder } = require('discord.js');
 
 // 👇 Danh sách role sẽ cấp (thêm ID vào đây)
 const AUTO_ROLE_IDS = [
-  '1526110631529414676',
   '1532698979991683092',
   '1532698962040193156',
   '1532696621865893959',
