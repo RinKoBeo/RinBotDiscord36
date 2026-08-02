@@ -37,44 +37,73 @@ const TOP_ADMIN_IDS = [
   "1146359469945667644"
   // "ID_KHAC_O_DAY",
 ];
-// ID kenh se hien "bang top song" tu dong cap nhat moi khi /settop duoc dung.
-// De trong ("") neu chua muon dung tinh nang bang tu dong, /top van dung binh thuong.
-const TOP_BOARD_CHANNEL_ID = "";
-// Anh mac dinh khi chua set anh rieng cho 1 top - thay bang link catbox cua ban
+
+// 5 BANG TOP KHAC NHAU, MOI BANG 1 KENH RIENG + DU LIEU RIENG (khong bi trung)
+// Vi tri trong mang nay quyet dinh so thu tu bang (1 den 5) khi dung lenh /settop va /top
+const TOP_BOARD_CHANNELS = [
+  "1525859026691424418", // Bang 1
+  "1532703834005045338", // Bang 2
+  "1532716870992527462", // Bang 3
+  "1532717134537560175", // Bang 4
+  "1532717158780502047"  // Bang 5
+];
+
+// Anh mac dinh khi chua set anh rieng cho 1 top
 const DEFAULT_TOP_IMAGE = "https://files.catbox.moe/2ts8cx.jpg";
 const TOP_BOARD_FILE = "top_board.json";
 
-// ===== DATA BẢNG XẾP HẠNG =====
+// ===== DATA BẢNG XẾP HẠNG (5 bang, moi bang co 10 vi tri rieng) =====
+// Cau truc: top["1"][1] = {...}, top["1"][2] = {...}, ..., top["5"][10] = {...}
 let top = {};
 try {
   const rawTop = JSON.parse(fs.readFileSync('top.json', 'utf8'));
-  for (let i = 1; i <= 10; i++) {
-    const val = rawTop[i];
-    if (val && typeof val === 'object') {
-      top[i] = val;
-    } else if (val) {
-      // du lieu cu chi luu userId dang string -> chuyen sang dinh dang moi
-      top[i] = { userId: val, country: "", rank: "", image: DEFAULT_TOP_IMAGE };
-    } else {
-      top[i] = null;
+  const isOldSingleBoard = rawTop && rawTop[1] !== undefined && rawTop["1"] === undefined;
+
+  if (isOldSingleBoard) {
+    // Du lieu cu (chi 1 bang duy nhat) -> chuyen het vao Bang 1, cac bang 2-5 de trong
+    top["1"] = {};
+    for (let i = 1; i <= 10; i++) {
+      const val = rawTop[i];
+      if (val && typeof val === 'object') top["1"][i] = val;
+      else if (val) top["1"][i] = { userId: val, country: "", rank: "", image: DEFAULT_TOP_IMAGE };
+      else top["1"][i] = null;
+    }
+    for (let b = 2; b <= 5; b++) {
+      top[String(b)] = {};
+      for (let i = 1; i <= 10; i++) top[String(b)][i] = null;
+    }
+  } else {
+    for (let b = 1; b <= 5; b++) {
+      const key = String(b);
+      top[key] = {};
+      const boardRaw = rawTop[key] || {};
+      for (let i = 1; i <= 10; i++) {
+        top[key][i] = boardRaw[i] || null;
+      }
     }
   }
 } catch {
-  for (let i = 1; i <= 10; i++) top[i] = null;
+  for (let b = 1; b <= 5; b++) {
+    top[String(b)] = {};
+    for (let i = 1; i <= 10; i++) top[String(b)][i] = null;
+  }
 }
 
 function saveTop() {
   fs.writeFileSync('top.json', JSON.stringify(top, null, 2));
 }
 
-// Tao 10 embed rieng biet cho 10 vi tri TOP (mau trang, khong emoji)
-function buildTopEmbeds() {
+// Tao 10 embed rieng biet cho 10 vi tri cua 1 BANG cu the (mau trang, khong emoji)
+// Neu chua set: van hien Country/Rank la "Chua co", chi @ nguoi la de trong den khi duoc set
+function buildTopEmbeds(boardKey) {
   const embeds = [];
+  const board = top[boardKey] || {};
   for (let i = 1; i <= 10; i++) {
-    const entry = top[i];
+    const entry = board[i];
     const embed = new EmbedBuilder()
       .setTitle(`TOP ${i}`)
-      .setColor(0xffffff);
+      .setColor(0xffffff)
+      .setImage((entry && entry.image) || DEFAULT_TOP_IMAGE);
 
     if (entry && entry.userId) {
       embed.setDescription(
@@ -82,42 +111,58 @@ function buildTopEmbeds() {
         `Country: ${entry.country || "Chua co"}\n` +
         `Rank: ${entry.rank || "Chua co"}`
       );
-      embed.setImage(entry.image || DEFAULT_TOP_IMAGE);
     } else {
-      embed.setDescription("Chua co du lieu");
+      embed.setDescription(
+        `Chua co nguoi\n` +
+        `Country: Chua co\n` +
+        `Rank: Chua co`
+      );
     }
     embeds.push(embed);
   }
   return embeds;
 }
 
-// Cap nhat "bang top song" trong kenh co dinh - tu tao moi neu chua co,
-// hoac edit lai tin nhan cu neu da ton tai (khong spam tin nhan moi)
-async function updateTopBoard(client) {
-  if (!TOP_BOARD_CHANNEL_ID) return;
+// Cap nhat "bang top song" trong dung kenh rieng cua bang do - tu tao moi neu chua co,
+// hoac SUA lai tin nhan cu neu da ton tai (khong spam tin nhan moi moi lan settop)
+async function updateTopBoard(client, boardNumber) {
+  const channelId = TOP_BOARD_CHANNELS[boardNumber - 1];
+  if (!channelId) return;
   try {
-    const channel = client.channels.cache.get(TOP_BOARD_CHANNEL_ID);
-    if (!channel) return;
+    const channel = client.channels.cache.get(channelId);
+    if (!channel) {
+      console.error(`Khong tim thay kenh cho Bang ${boardNumber} (ID: ${channelId})`);
+      return;
+    }
 
-    const embeds = buildTopEmbeds();
+    const embeds = buildTopEmbeds(String(boardNumber));
 
     let boardInfo = {};
     try { boardInfo = JSON.parse(fs.readFileSync(TOP_BOARD_FILE, 'utf8')); } catch {}
 
-    if (boardInfo.messageId) {
+    const savedMsgId = boardInfo[String(boardNumber)];
+    if (savedMsgId) {
       try {
-        const oldMsg = await channel.messages.fetch(boardInfo.messageId);
+        const oldMsg = await channel.messages.fetch(savedMsgId);
         await oldMsg.edit({ embeds });
         return;
       } catch {
-        // tin nhan cu khong con ton tai -> gui moi ben duoi
+        // tin nhan cu khong con ton tai (bi xoa tay) -> gui moi ben duoi
       }
     }
 
     const sent = await channel.send({ embeds });
-    fs.writeFileSync(TOP_BOARD_FILE, JSON.stringify({ messageId: sent.id }, null, 2));
+    boardInfo[String(boardNumber)] = sent.id;
+    fs.writeFileSync(TOP_BOARD_FILE, JSON.stringify(boardInfo, null, 2));
   } catch (err) {
     console.error("Loi cap nhat bang top:", err.message);
+  }
+}
+
+// Khi bot vua khoi dong, dam bao ca 5 bang deu da co san tin nhan trong kenh cua no
+async function initAllTopBoards(client) {
+  for (let b = 1; b <= 5; b++) {
+    await updateTopBoard(client, b);
   }
 }
 
@@ -215,7 +260,10 @@ client.once("ready", async () => {
       ),
     new SlashCommandBuilder()
       .setName("settop")
-      .setDescription("Set 1 vi tri trong bang TOP")
+      .setDescription("Set 1 vi tri trong 1 bang TOP")
+      .addIntegerOption(option =>
+        option.setName("bang").setDescription("Bang TOP (1-5)").setRequired(true).setMinValue(1).setMaxValue(5)
+      )
       .addIntegerOption(option =>
         option.setName("vitri").setDescription("Vi tri TOP (1-10)").setRequired(true).setMinValue(1).setMaxValue(10)
       )
@@ -233,7 +281,10 @@ client.once("ready", async () => {
       ),
     new SlashCommandBuilder()
       .setName("top")
-      .setDescription("Xem bang xep hang TOP 1-10")
+      .setDescription("Xem 1 bang xep hang TOP 1-10")
+      .addIntegerOption(option =>
+        option.setName("bang").setDescription("Bang TOP (1-5)").setRequired(true).setMinValue(1).setMaxValue(5)
+      )
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -244,6 +295,9 @@ client.once("ready", async () => {
   ).catch(err => console.error("Loi load lenh Slash:", err.message));
 
   console.log("Slash command loaded");
+
+  // Dam bao ca 5 bang TOP deu co san tin nhan trong kenh rieng cua no ngay tu luc bot online
+  await initAllTopBoards(client);
 
   const ID_SERVER_CỦA_MÀY = "1525856288444125197"; 
   const ID_PHÒNG_VOICE_MUỐN_BOT_NGỒI = "1505850307765080194"; 
@@ -676,23 +730,27 @@ client.on("interactionCreate", async interaction => {
       return interaction.reply({ content: "Ban khong co quyen dung lenh nay!", ephemeral: true });
     }
 
+    const bang = interaction.options.getInteger("bang");
     const vitri = interaction.options.getInteger("vitri");
     const nguoi = interaction.options.getUser("nguoi");
     const quocgia = interaction.options.getString("quocgia");
     const rank = interaction.options.getString("rank");
     const anh = interaction.options.getString("anh") || DEFAULT_TOP_IMAGE;
 
-    top[vitri] = { userId: nguoi.id, country: quocgia, rank: rank, image: anh };
+    const boardKey = String(bang);
+    if (!top[boardKey]) top[boardKey] = {};
+    top[boardKey][vitri] = { userId: nguoi.id, country: quocgia, rank: rank, image: anh };
     saveTop();
 
-    await interaction.reply({ content: `Da cap nhat TOP ${vitri} cho <@${nguoi.id}>`, ephemeral: true }).catch(() => {});
-    await updateTopBoard(client);
+    await interaction.reply({ content: `Da cap nhat Bang ${bang} - TOP ${vitri} cho <@${nguoi.id}>`, ephemeral: true }).catch(() => {});
+    await updateTopBoard(client, bang);
     return;
   }
 
   // ----- /top -----
   if (interaction.commandName === "top") {
-    const embeds = buildTopEmbeds();
+    const bang = interaction.options.getInteger("bang");
+    const embeds = buildTopEmbeds(String(bang));
     await interaction.reply({ embeds }).catch(() => {});
     return;
   }
