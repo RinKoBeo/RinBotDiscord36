@@ -49,7 +49,7 @@ const TOP_BOARD_CHANNELS = [
 ];
 
 // Anh mac dinh khi chua set anh rieng cho 1 top
-const DEFAULT_TOP_IMAGE = "https://files.catbox.moe/2ts8cx.jpg";
+const DEFAULT_TOP_IMAGE = "https://files.catbox.moe/4lgur3.png";
 
 // ===== TU DONG SAO LUU top.json LEN GITHUB (de khong mat du lieu moi lan Render deploy lai) =====
 // Can 3 bien moi truong nay tren Render (Environment):
