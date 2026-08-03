@@ -51,6 +51,62 @@ const TOP_BOARD_CHANNELS = [
 // Anh mac dinh khi chua set anh rieng cho 1 top
 const DEFAULT_TOP_IMAGE = "https://files.catbox.moe/2ts8cx.jpg";
 
+// ===== TU DONG SAO LUU top.json LEN GITHUB (de khong mat du lieu moi lan Render deploy lai) =====
+// Can 3 bien moi truong nay tren Render (Environment):
+//   GITHUB_TOKEN  = Personal Access Token co quyen "Contents: Read and write"
+//   GITHUB_REPO   = "TenChuTaiKhoan/TenRepo" (vd: "RinKoBeo/RinBotDiscord36")
+//   GITHUB_BRANCH = "main" (co the bo trong, mac dinh la "main")
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GITHUB_REPO = process.env.GITHUB_REPO;
+const GITHUB_BRANCH = process.env.GITHUB_BRANCH || "main";
+const GITHUB_DATA_PATH = "top.json";
+
+async function pushTopJsonToGitHub() {
+  if (!GITHUB_TOKEN || !GITHUB_REPO) return; // chua cau hinh env -> bo qua, khong crash
+  try {
+    const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_DATA_PATH}`;
+
+    // Buoc 1: lay "sha" hien tai cua file tren GitHub (bat buoc phai co de sua dung file)
+    const getRes = await fetch(`${apiUrl}?ref=${GITHUB_BRANCH}`, {
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Accept: "application/vnd.github+json"
+      }
+    });
+    let sha;
+    if (getRes.ok) {
+      const getData = await getRes.json();
+      sha = getData.sha;
+    }
+
+    // Buoc 2: day noi dung moi len (co kem sha neu file da ton tai, khong thi tao moi)
+    const content = fs.readFileSync('top.json', 'utf8');
+    const contentBase64 = Buffer.from(content, 'utf8').toString('base64');
+
+    const putRes = await fetch(apiUrl, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        message: "Tu dong cap nhat du lieu TOP",
+        content: contentBase64,
+        branch: GITHUB_BRANCH,
+        ...(sha ? { sha } : {})
+      })
+    });
+
+    if (!putRes.ok) {
+      const errText = await putRes.text();
+      console.error("Loi day top.json len GitHub:", errText);
+    }
+  } catch (err) {
+    console.error("Loi ket noi GitHub API:", err.message);
+  }
+}
+
 // ===== DATA BẢNG XẾP HẠNG (5 bang, moi bang co 10 vi tri rieng) =====
 // Cau truc: top["1"][1] = {...}, top["1"][2] = {...}, ..., top["5"][10] = {...}
 let top = {};
@@ -90,6 +146,7 @@ try {
 
 function saveTop() {
   fs.writeFileSync('top.json', JSON.stringify(top, null, 2));
+  pushTopJsonToGitHub(); // chay ngam, khong doi ket qua, khong lam cham /settop
 }
 
 // Tao 10 embed rieng biet cho 10 vi tri cua 1 BANG cu the (mau trang, khong emoji)
@@ -100,15 +157,15 @@ function buildTopEmbeds(boardKey) {
   for (let i = 1; i <= 10; i++) {
     const entry = board[i];
     const embed = new EmbedBuilder()
-      .setTitle(`TOP ${i}`)
+      .setTitle(`𝐓𝐨𝐩 ${i}`)
       .setColor(0xffffff)
       .setImage((entry && entry.image) || DEFAULT_TOP_IMAGE);
 
     if (entry && entry.userId) {
       embed.setDescription(
         `<@${entry.userId}>\n` +
-        `Country: ${entry.country || "Chua co"}\n` +
-        `Rank: ${entry.rank || "Chua co"}`
+        `𝐂𝐨𝐮𝐧𝐭𝐫𝐲: ${entry.country || "Chua co"}\n` +
+        `𝐑𝐚𝐧𝐤: ${entry.rank || "Chua co"}`
       );
     } else {
       embed.setDescription(
