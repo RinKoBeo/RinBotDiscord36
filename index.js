@@ -150,28 +150,33 @@ function saveTop() {
 }
 
 // Tao 10 embed rieng biet cho 10 vi tri cua 1 BANG cu the (mau trang, khong emoji)
-// Neu chua set: van hien Country/Rank la "Chua co", chi @ nguoi la de trong den khi duoc set
+// Neu chua set: van hien Country/Rank la "Chua co", chi nguoi la de trong den khi duoc set
+// Country/Rank hien thanh 2 truong canh nhau, co footer thoi gian cap nhat,
+// va thumbnail la avatar Roblox neu da duoc gan luc /settop
 function buildTopEmbeds(boardKey) {
   const embeds = [];
   const board = top[boardKey] || {};
   for (let i = 1; i <= 10; i++) {
     const entry = board[i];
     const embed = new EmbedBuilder()
-      .setTitle(`𝐓𝐨𝐩 ${i}`)
+      .setTitle(`Top ${i}`)
       .setColor(0xffffff)
-      .setImage((entry && entry.image) || DEFAULT_TOP_IMAGE);
+      .setImage((entry && entry.image) || DEFAULT_TOP_IMAGE)
+      .setFooter({ text: `Top ${i}` })
+      .setTimestamp();
 
     if (entry && entry.userId) {
-      embed.setDescription(
-        `<@${entry.userId}>\n` +
-        `𝐂𝐨𝐮𝐧𝐭𝐫𝐲: ${entry.country || "Chua co"}\n` +
-        `𝐑𝐚𝐧𝐤: ${entry.rank || "Chua co"}`
+      embed.setDescription(`**<@${entry.userId}>**`);
+      embed.addFields(
+        { name: "Country", value: entry.country || "Chua co", inline: true },
+        { name: "Rank", value: entry.rank || "Chua co", inline: true }
       );
+      if (entry.robloxAvatar) embed.setThumbnail(entry.robloxAvatar);
     } else {
-      embed.setDescription(
-        `Chua co nguoi\n` +
-        `Country: Chua co\n` +
-        `Rank: Chua co`
+      embed.setDescription("Chua co nguoi");
+      embed.addFields(
+        { name: "Country", value: "Chua co", inline: true },
+        { name: "Rank", value: "Chua co", inline: true }
       );
     }
     embeds.push(embed);
@@ -342,6 +347,9 @@ client.once("ready", async () => {
       )
       .addStringOption(option =>
         option.setName("anh").setDescription("Link anh (bo trong se dung anh mac dinh)").setRequired(false)
+      )
+      .addStringOption(option =>
+        option.setName("roblox").setDescription("Ten Roblox de lay avatar lam thumbnail (tuy chon)").setRequired(false)
       ),
     new SlashCommandBuilder()
       .setName("top")
@@ -813,19 +821,33 @@ client.on("interactionCreate", async interaction => {
       return interaction.reply({ content: "Ban khong co quyen dung lenh nay!", ephemeral: true });
     }
 
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
     const bang = interaction.options.getInteger("bang");
     const vitri = interaction.options.getInteger("vitri");
     const nguoi = interaction.options.getUser("nguoi");
     const quocgia = interaction.options.getString("quocgia");
     const rank = interaction.options.getString("rank");
     const anh = interaction.options.getString("anh") || DEFAULT_TOP_IMAGE;
+    const robloxUsername = interaction.options.getString("roblox");
+
+    let robloxAvatar = null;
+    if (robloxUsername) {
+      try {
+        const rbId = await noblox.getIdFromUsername(robloxUsername);
+        const avatarData = await noblox.getPlayerThumbnail(rbId, "150x150", "png", false, "headshot");
+        robloxAvatar = avatarData[0]?.imageUrl || null;
+      } catch {
+        // khong tim thay user Roblox -> bo qua, khong co thumbnail rieng
+      }
+    }
 
     const boardKey = String(bang);
     if (!top[boardKey]) top[boardKey] = {};
-    top[boardKey][vitri] = { userId: nguoi.id, country: quocgia, rank: rank, image: anh };
+    top[boardKey][vitri] = { userId: nguoi.id, country: quocgia, rank: rank, image: anh, robloxAvatar };
     saveTop();
 
-    await interaction.reply({ content: `Da cap nhat Bang ${bang} - TOP ${vitri} cho <@${nguoi.id}>`, ephemeral: true }).catch(() => {});
+    await interaction.editReply({ content: `Da cap nhat Bang ${bang} - TOP ${vitri} cho <@${nguoi.id}>` }).catch(() => {});
     await updateTopBoard(client, bang);
     return;
   }
