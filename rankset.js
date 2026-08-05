@@ -12,8 +12,8 @@ module.exports = function(client, adminIds) {
 
     const nguoiDuocGan = interaction.options.getUser('nguoi');
     const rank = interaction.options.getString('rank');
-    const mod = interaction.options.getString('dieuchinh') || "Không có";
-    const Assigned = interaction.user;
+    const dieuChinh = interaction.options.getString('dieuchinh') || "Không có";
+    const nguoiGan = interaction.user;
 
     const embed = new EmbedBuilder()
       .setTitle('Rank Assigned')
