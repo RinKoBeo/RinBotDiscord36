@@ -3,7 +3,10 @@ const { joinVoiceChannel } = require("@discordjs/voice"); // Thêm thư viện v
 
 module.exports = (client) => {
   // ⚙️ CẤU HÌNH ID: Giữ nguyên ID phòng voice chờ của mày
-  const CHANNELS_TAO_PHONG_ID = "1526257699975725136"; 
+  const CHANNELS_TAO_PHONG_ID = [
+    '1536384481965907989',
+    '1526257699975725136'
+  ];
 
   // Bộ nhớ tạm để lưu thông tin phòng
   const activeVoiceRooms = new Map(); 
