@@ -11,10 +11,8 @@ const AUTO_ROLE_IDS = [
   '1529149265241313411'
 ];
 
-const LOG_CHANNEL_ID = [
-  '1536384424822702172',
-  '1526991038680400044'
- ]; // ID kenh log
+const LOG_CHANNEL_ID =  '1526991038680400044';
+  // ID kenh log
 
 module.exports = function(client) {
   client.on('guildMemberAdd', async (member) => {

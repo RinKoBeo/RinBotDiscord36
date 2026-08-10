@@ -3,12 +3,9 @@
 module.exports = (client) => {
     const { EmbedBuilder } = require('discord.js');
 
-    const WELCOME_CHANNEL_ID = [
-        '1525858054929649744'
-    ];
-    const GOODBYE_CHANNEL_ID = [
-        '1525858147669901596'
-    ];
+    const WELCOME_CHANNEL_ID =   '1525858054929649744';
+
+    const GOODBYE_CHANNEL_ID =  '1525858147669901596';
 
     // ===== WELCOME =====
     client.on("guildMemberAdd", async (member) => {
