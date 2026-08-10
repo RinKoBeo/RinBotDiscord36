@@ -2,7 +2,7 @@ const { EmbedBuilder, AuditLogEvent } = require('discord.js');
 
 module.exports = (client) => {
   // ⚙️ ID KÊNH MỚI CỦA MÀY
-  const LOG_CHANNEL_ID = ["1525912490343399475","1536384422763438090"];
+  const LOG_CHANNEL_ID = "1525912490343399475";
 
   // ========================================================
   // 👁️ MẮT 1: BẮT QUẢ TANG XÓA TIN NHẮN (SỰ KIỆN CHAT)
