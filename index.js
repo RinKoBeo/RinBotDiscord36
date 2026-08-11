@@ -27,17 +27,15 @@ const VERIFIED_ROLE_ID = process.env.VERIFIED_ROLE_ID;
 const PREFIX = "!";
 
 // ===== CONFIG QUYỀN HỆ THỐNG =====
-const OWNER_ID = ["1517437552213098529" ,"1146359469945667644" , "1359540796793294858", "1389323799886823577"];
+const OWNER_ID = ["1517437552213098529" ,"1146359469945667644"];
 const WHITELIST = ["1146359469945667644", "1517437552213098529"];
 
 // ===== CONFIG RIÊNG CHO HỆ THỐNG TOP MỚI =====
 // Dan cac ID Discord duoc phep dung lenh /settop vao day, cach nhau bang dau phay
 const TOP_ADMIN_IDS = [
   "1517437552213098529",
-  "1146359469945667644",
-  "1359540796793294858",
-  "1389323799886823577"
- // "ID_KHAC_O_DAY",
+  "1146359469945667644"
+  // "ID_KHAC_O_DAY",
 ];
 
 // 5 BANG TOP KHAC NHAU, MOI BANG 1 KENH RIENG + DU LIEU RIENG (khong bi trung)
@@ -47,12 +45,11 @@ const TOP_BOARD_CHANNELS = [
   "1532703834005045338", // Bang 2
   "1532716870992527462", // Bang 3
   "1532717134537560175", // Bang 4
-  "1532717158780502047" // bang 5
-  
+  "1532717158780502047"  // Bang 5
 ];
 
 // Anh mac dinh khi chua set anh rieng cho 1 top
-const DEFAULT_TOP_IMAGE = "https://files.catbox.moe/4lgur3.png";
+const DEFAULT_TOP_IMAGE = "https://files.catbox.moe/98geuf.gif";
 
 // ===== TU DONG SAO LUU top.json LEN GITHUB (de khong mat du lieu moi lan Render deploy lai) =====
 // Can 3 bien moi truong nay tren Render (Environment):
@@ -169,7 +166,7 @@ function buildTopEmbeds(boardKey) {
       .setTimestamp();
 
     if (entry && entry.userId) {
-      embed.setDescription(`**<@${entry.userId}>**`);
+      embed.setDescription(`**<@${entry.userId}>**\nRoblox: ${entry.robloxUsername || "Chua co"}`);
       embed.addFields(
         { name: "Country", value: entry.country || "Chua co", inline: true },
         { name: "Rank", value: entry.rank || "Chua co", inline: true }
@@ -352,7 +349,7 @@ client.once("ready", async () => {
         option.setName("anh").setDescription("Link anh (bo trong se dung anh mac dinh)").setRequired(false)
       )
       .addStringOption(option =>
-        option.setName("roblox").setDescription("Ten Roblox de lay avatar lam thumbnail (tuy chon)").setRequired(false)
+        option.setName("roblox").setDescription("Ten Roblox de lay avatar (bat buoc)").setRequired(true)
       ),
     new SlashCommandBuilder()
       .setName("top")
@@ -835,19 +832,17 @@ client.on("interactionCreate", async interaction => {
     const robloxUsername = interaction.options.getString("roblox");
 
     let robloxAvatar = null;
-    if (robloxUsername) {
-      try {
-        const rbId = await noblox.getIdFromUsername(robloxUsername);
-        const avatarData = await noblox.getPlayerThumbnail(rbId, "150x150", "png", false, "headshot");
-        robloxAvatar = avatarData[0]?.imageUrl || null;
-      } catch {
-        // khong tim thay user Roblox -> bo qua, khong co thumbnail rieng
-      }
+    try {
+      const rbId = await noblox.getIdFromUsername(robloxUsername);
+      const avatarData = await noblox.getPlayerThumbnail(rbId, "150x150", "png", false, "headshot");
+      robloxAvatar = avatarData[0]?.imageUrl || null;
+    } catch {
+      return interaction.editReply({ content: `Khong tim thay user Roblox "${robloxUsername}". Vui long kiem tra lai ten va thu lai.` }).catch(() => {});
     }
 
     const boardKey = String(bang);
     if (!top[boardKey]) top[boardKey] = {};
-    top[boardKey][vitri] = { userId: nguoi.id, country: quocgia, rank: rank, image: anh, robloxAvatar };
+    top[boardKey][vitri] = { userId: nguoi.id, country: quocgia, rank: rank, image: anh, robloxAvatar, robloxUsername };
     saveTop();
 
     await interaction.editReply({ content: `Da cap nhat Bang ${bang} - TOP ${vitri} cho <@${nguoi.id}>` }).catch(() => {});
