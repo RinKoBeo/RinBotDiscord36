@@ -368,15 +368,59 @@ client.once("ready", async () => {
       )
       .addStringOption(option =>
         option.setName("dieuchinh").setDescription("Ghi chu them (vd: Mid, High, Low)").setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName("lock")
+      .setDescription("Khoa kenh nay, khong cho @everyone chat"),
+    new SlashCommandBuilder()
+      .setName("unlock")
+      .setDescription("Mo khoa kenh nay, cho @everyone chat lai binh thuong"),
+    new SlashCommandBuilder()
+      .setName("unlockall")
+      .setDescription("Fix quyen toan bo server (an kenh VIP, khoa kenh thong bao, tra ve goc kenh chat)"),
+    new SlashCommandBuilder()
+      .setName("warn")
+      .setDescription("Canh cao 1 thanh vien (tich gay)")
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi bi canh cao").setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName("lydo").setDescription("Ly do canh cao").setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName("checkwarn")
+      .setDescription("Xem so gay canh cao cua 1 thanh vien")
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi can xem (bo trong = xem chinh minh)").setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName("unwarn")
+      .setDescription("Xoa het gay canh cao cua 1 thanh vien")
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi duoc xoa toi").setRequired(true)
       )
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-  await rest.put(
-    Routes.applicationGuildCommands(client.user.id, "1525856288444125197"),
-    { body: commands }
-  ).catch(err => console.error("Loi load lenh Slash:", err.message));
+  // Dang ky lenh GUILD (tuc thi) cho TAT CA cac server bot dang co mat,
+  // thay vi chi 1 server co dinh -> them bot vao server moi la co lenh
+  // ngay, khong can sua code moi lan.
+  if (client.guilds.cache.size === 0) {
+    console.log("Bot chua o trong server nao ca, khong co gi de dang ky lenh.");
+  } else {
+    for (const guild of client.guilds.cache.values()) {
+      try {
+        await rest.put(
+          Routes.applicationGuildCommands(client.user.id, guild.id),
+          { body: commands }
+        );
+        console.log(`Da dang ky lenh cho server: ${guild.name}`);
+      } catch (err) {
+        console.error(`Loi dang ky lenh cho server ${guild.name}:`, err.message);
+      }
+    }
+  }
 
   // Xoa sach bo lenh GLOBAL cu (neu con sot lai tu truoc), tranh bi hien trung
   // voi bo lenh GUILD moi vua dang ky o tren
@@ -928,5 +972,6 @@ require("./taophong.js")(client);
 require("./wellcome.js")(client);
 require("./autorole.js")(client);
 require("./rankset.js")(client, TOP_ADMIN_IDS);
+require("./help.js")(client);
 // ===== LOGIN =====
 client.login(TOKEN);

@@ -27,32 +27,25 @@ function saveViolators(data) {
 }
 
 module.exports = (client) => {
-  client.on('messageCreate', async (message) => {
-    if (message.author.bot || !message.content.startsWith('!')) return;
-
-    const args = message.content.slice(1).trim().split(/ +/);
-    const cmd = args.shift().toLowerCase();
+  client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
 
     // ========================================================
-    // LỆNH 1: 🔨 !WARN @User [Lý do] (TÍCH GẬY LIÊN TỤC)
+    // LỆNH 1: /WARN (TÍCH GẬY LIÊN TỤC)
     // ========================================================
-    if (cmd === "warn") {
-      // Check quyền: Chỉ Staff có quyền Quản lý tin nhắn hoặc Admin mới được phạt
-      if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages) && !message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return message.reply("🛑 Tuổi lờ đòi thực thi công lý! Lệnh này chỉ dành cho Ban Quản Trị Clan thôi.");
+    if (interaction.commandName === "warn") {
+      if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages) && !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.reply({ content: "🛑 Tuổi lờ đòi thực thi công lý! Lệnh này chỉ dành cho Ban Quản Trị Clan thôi.", ephemeral: true }).catch(() => {});
       }
 
-      const targetUser = message.mentions.users.first();
-      if (!targetUser) return message.reply("❌ Tag cái thằng muốn warn vào khứa ơi! Ví dụ: `!warn @ThằngPháSới phá game` ");
+      const targetUser = interaction.options.getUser('nguoi');
+      const lyDo = interaction.options.getString('lydo') || "Không có lý do cụ thể (Thích thì warn)";
 
-      if (targetUser.id === message.author.id) return message.reply("Ngáo à? Tự warn chính mình làm mẹ gì!");
-      if (targetUser.bot) return message.reply("Bot ngoan vcl warn nó làm gì?");
-
-      const lyDo = args.slice(1).join(" ") || "Không có lý do cụ thể (Thích thì warn)";
+      if (targetUser.id === interaction.user.id) return interaction.reply({ content: "Ngáo à? Tự warn chính mình làm mẹ gì!", ephemeral: true }).catch(() => {});
+      if (targetUser.bot) return interaction.reply({ content: "Bot ngoan vcl warn nó làm gì?", ephemeral: true }).catch(() => {});
 
       let violators = readViolators();
-      
-      // Cộng dồn gậy, không giới hạn, không tự reset
+
       if (!violators[targetUser.id]) violators[targetUser.id] = 0;
       violators[targetUser.id] += 1;
 
@@ -61,70 +54,66 @@ module.exports = (client) => {
       const embedWarn = new EmbedBuilder()
         .setTitle("⚠️ PHÁT GẬY CẢNH CÁO THÀNH VIÊN ⚠️")
         .setDescription(`👤 **Thành viên bị phạt:** <@${targetUser.id}>\n` +
-          `🛡️ **Người gõ đầu:** <@${message.author.id}>\n` +
+          `🛡️ **Người gõ đầu:** <@${interaction.user.id}>\n` +
           `📝 **Lý do:** ${lyDo}\n` +
           `📊 **Tổng số gậy hiện tại:** 🔥 **${violators[targetUser.id]}** gậy!`)
         .setFooter({ text: "Gậy đã được tích vào sổ Rin, Admin sẽ xử lý theo luật Clan!" })
-        .setColor(0xffaa00) // Màu cam cảnh báo
+        .setColor(0xffaa00)
         .setTimestamp();
 
-      return message.channel.send({ embeds: [embedWarn] });
+      return interaction.reply({ embeds: [embedWarn] }).catch(() => {});
     }
 
     // ========================================================
-    // LỆNH 2: 🔍 !CHECKWARN @User (XEM SỐ GẬY ĐANG CÓ)
+    // LỆNH 2: /CHECKWARN (XEM SỐ GẬY ĐANG CÓ)
     // ========================================================
-    if (cmd === "checkwarn") {
-      // Ai cũng có quyền check lệnh này để xem mình hoặc người khác có bao nhiêu gậy
-      const targetUser = message.mentions.users.first() || message.author;
-      
+    if (interaction.commandName === "checkwarn") {
+      const targetUser = interaction.options.getUser('nguoi') || interaction.user;
+
       let violators = readViolators();
       const soWarn = violators[targetUser.id] || 0;
 
       const embedCheck = new EmbedBuilder()
         .setTitle("📋 KIỂM TRA SỔ TỘI PHẠM CLAN 📋")
-        .setDescription(`👤 **Thành viên:** <@${targetUser.id}>\n📊 **Số gậy đang gánh:** 🔥 **${soWarn}** gậy!`)
-        .setColor(0x00ffff) // Màu xanh ngọc xịn mịn
+        .setColor(0x00ffff)
         .setTimestamp();
 
       if (soWarn === 0) {
         embedCheck.setDescription(`👤 **Thành viên:** <@${targetUser.id}>\n😇 **Tình trạng:** Trong sạch vcl, chưa ăn gậy nào!`);
-        embedCheck.setColor(0x00ff00); // Đổi sang màu xanh lá cây vì nó ngoan
+        embedCheck.setColor(0x00ff00);
+      } else {
+        embedCheck.setDescription(`👤 **Thành viên:** <@${targetUser.id}>\n📊 **Số gậy đang gánh:** 🔥 **${soWarn}** gậy!`);
       }
 
-      return message.channel.send({ embeds: [embedCheck] });
+      return interaction.reply({ embeds: [embedCheck] }).catch(() => {});
     }
 
     // ========================================================
-    // LỆNH 3: 🕊️ !UNWARN @User (ĐẠI XÁ - RESET SỐ GẬY VỀ 0)
+    // LỆNH 3: /UNWARN (ĐẠI XÁ - RESET SỐ GẬY VỀ 0)
     // ========================================================
-    if (cmd === "unwarn") {
-      // Chỉ Admin hoặc Staff tối cao mới được xóa tội
-      if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages) && !message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return message.reply("🛑 Tuổi lờ đòi xóa tội! Quyền đại xá chỉ dành cho Admin thôi khứa.");
+    if (interaction.commandName === "unwarn") {
+      if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages) && !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.reply({ content: "🛑 Tuổi lờ đòi xóa tội! Quyền đại xá chỉ dành cho Admin thôi khứa.", ephemeral: true }).catch(() => {});
       }
 
-      const targetUser = message.mentions.users.first();
-      if (!targetUser) return message.reply("❌ Tag cái thằng mày muốn xóa tội vào! Ví dụ: `!unwarn @NgườiHốiCải` ");
+      const targetUser = interaction.options.getUser('nguoi');
 
       let violators = readViolators();
 
-      // Nếu thằng này đéo có tội tình gì từ trước
       if (!violators[targetUser.id] || violators[targetUser.id] === 0) {
-        return message.reply(`😇 Khứa <@${targetUser.id}> này vốn dĩ trong sạch, có gậy nào đâu mà xóa!`);
+        return interaction.reply({ content: `😇 Khứa <@${targetUser.id}> này vốn dĩ trong sạch, có gậy nào đâu mà xóa!`, ephemeral: true }).catch(() => {});
       }
 
-      // Tiến hành xóa sổ, đưa số gậy về 0
       violators[targetUser.id] = 0;
       saveViolators(violators);
 
       const embedUnwarn = new EmbedBuilder()
         .setTitle("🕊️ LỆNH ĐẠI XÁ CLAN - CẢI TÀ QUY CHÍNH 🕊️")
-        .setDescription(`✅ Đã xóa sạch toàn bộ gậy cảnh cáo của <@${targetUser.id}>!\n🛡️ **Người thực thi:** <@${message.author.id}>\n😇 **Số gậy hiện tại:** 0 (Làm lại cuộc đời nhé khứa!)`)
-        .setColor(0x00ff00) // Màu xanh lá cây an lành
+        .setDescription(`✅ Đã xóa sạch toàn bộ gậy cảnh cáo của <@${targetUser.id}>!\n🛡️ **Người thực thi:** <@${interaction.user.id}>\n😇 **Số gậy hiện tại:** 0 (Làm lại cuộc đời nhé khứa!)`)
+        .setColor(0x00ff00)
         .setTimestamp();
 
-      return message.channel.send({ embeds: [embedUnwarn] });
+      return interaction.reply({ embeds: [embedUnwarn] }).catch(() => {});
     }
   });
 };
