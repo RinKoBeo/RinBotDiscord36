@@ -14,6 +14,11 @@ module.exports = function(client) {
         {
           name: 'Quản Lý',
           value:
+            '/kick nguoi — Kick một thành viên\n' +
+            '/ban nguoi — Ban một thành viên\n' +
+            '/unban id — Gỡ ban theo ID\n' +
+            '/mute nguoi thoigian — Timeout một thành viên (vd: 10s, 5m, 2h)\n' +
+            '/unmute nguoi — Gỡ timeout một thành viên\n' +
             '/lock — Khóa kênh hiện tại, không cho gửi tin nhắn\n' +
             '/unlock — Mở khóa kênh hiện tại\n' +
             '/unlockall — Chỉ Admin: sắp xếp lại quyền toàn bộ server\n' +

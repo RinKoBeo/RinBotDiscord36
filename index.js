@@ -346,10 +346,10 @@ client.once("ready", async () => {
         option.setName("rank").setDescription("Rank trong game").setRequired(true)
       )
       .addStringOption(option =>
-        option.setName("anh").setDescription("Link anh (bo trong se dung anh mac dinh)").setRequired(false)
+        option.setName("roblox").setDescription("Ten Roblox de lay avatar (bat buoc)").setRequired(true)
       )
       .addStringOption(option =>
-        option.setName("roblox").setDescription("Ten Roblox de lay avatar (bat buoc)").setRequired(true)
+        option.setName("anh").setDescription("Link anh (bo trong se dung anh mac dinh)").setRequired(false)
       ),
     new SlashCommandBuilder()
       .setName("top")
@@ -398,7 +398,43 @@ client.once("ready", async () => {
       .setDescription("Xoa het gay canh cao cua 1 thanh vien")
       .addUserOption(option =>
         option.setName("nguoi").setDescription("Nguoi duoc xoa toi").setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName("kick")
+      .setDescription("Kick 1 thanh vien khoi server")
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi can kick").setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName("ban")
+      .setDescription("Ban 1 thanh vien khoi server")
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi can ban").setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName("unban")
+      .setDescription("Go ban cho 1 nguoi theo ID")
+      .addStringOption(option =>
+        option.setName("id").setDescription("ID Discord cua nguoi can go ban").setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName("mute")
+      .setDescription("Timeout 1 thanh vien")
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi can timeout").setRequired(true)
       )
+      .addStringOption(option =>
+        option.setName("thoigian").setDescription("Vd: 10s, 5m, 2h").setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName("unmute")
+      .setDescription("Go timeout cho 1 thanh vien")
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi can go timeout").setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName("help")
+      .setDescription("Xem danh sach chuc nang va cach su dung bot")
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -690,49 +726,6 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // === CÁC LỆNH QUẢN LÝ ===
-  if (cmd === "kick") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.KickMembers)) return message.reply("Đéo có Trình.");
-    if (!member) return message.reply("Tag thg cần kick.");
-    if (!member.kickable) return message.reply("Đéo thể kick người này.");
-    try { await member.kick(); message.reply(`Đã kick ${member.user.tag}`); } catch { message.reply("Kick Đéo đc."); }
-  }
-
-  if (cmd === "ban") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers)) return message.reply("Đéo có Trình.");
-    if (!member) return message.reply("Tag thg cần ban.");
-    if (!member.bannable) return message.reply("Đéo thể ban người này.");
-    try { await member.ban(); message.reply(`Đã ban ${member.user.tag}`); } catch { message.reply("Ban Đéo đc."); }
-  }
-
-  if (cmd === "unban") {
-    const userIdToUnban = args[0]; 
-    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers)) return message.reply("Đéo có Trình.");
-    if (!userIdToUnban) return message.reply("Nhập ID của thằng cần unban!");
-    try {
-      const banList = await message.guild.bans.fetch();
-      if (!banList.has(userIdToUnban)) return message.reply("Thằng này có bị ban đéo đâu?");
-      await message.guild.members.unban(userIdToUnban);
-      message.reply(`Đã gỡ ban cho khứa mang ID: ${userIdToUnban}!`);
-    } catch { message.reply("Unban Đéo đc."); }
-  }
-
-  if (cmd === "mute") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return message.reply("Đéo Đủ Trình.");
-    const timeArg = args[1];
-    if (!member) return message.reply("Tag thg cần timeout.");
-    if (!timeArg) return message.reply("Nhập mẫu: 10s, 5m, 2h");
-    const duration = parseTime(timeArg);
-    if (!duration || !member.moderatable) return message.reply("Sai cú pháp hoặc đéo bóp họng được nó.");
-    try { await member.timeout(duration); message.reply(`${member.user.tag} Câm Mồm!! ${timeArg}`); } catch { message.reply("Mute thất bại."); }
-  }
-
-  if (cmd === "unmute") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return message.reply("Đéo Đủ Trình.");
-    if (!member) return message.reply("Tag thg cần gỡ.");
-    try { await member.timeout(null); message.reply(`${member.user.tag} đã hết mute`); } catch { message.reply("Lỗi gỡ mute."); }
-  }
-
 });
 
 // ============================================================
@@ -899,6 +892,92 @@ client.on("interactionCreate", async interaction => {
     const bang = interaction.options.getInteger("bang");
     const embeds = buildTopEmbeds(String(bang));
     await interaction.reply({ embeds }).catch(() => {});
+    return;
+  }
+
+  // ----- /kick -----
+  if (interaction.commandName === "kick") {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.KickMembers)) {
+      return interaction.reply({ content: "Đéo có Trình.", ephemeral: true }).catch(() => {});
+    }
+    const member = await interaction.guild.members.fetch(interaction.options.getUser("nguoi").id).catch(() => null);
+    if (!member) return interaction.reply({ content: "Không tìm thấy thành viên này trong server.", ephemeral: true }).catch(() => {});
+    if (!member.kickable) return interaction.reply({ content: "Đéo thể kick người này.", ephemeral: true }).catch(() => {});
+    try {
+      await member.kick();
+      await interaction.reply({ content: `Đã kick ${member.user.tag}` }).catch(() => {});
+    } catch {
+      await interaction.reply({ content: "Kick Đéo đc.", ephemeral: true }).catch(() => {});
+    }
+    return;
+  }
+
+  // ----- /ban -----
+  if (interaction.commandName === "ban") {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+      return interaction.reply({ content: "Đéo có Trình.", ephemeral: true }).catch(() => {});
+    }
+    const member = await interaction.guild.members.fetch(interaction.options.getUser("nguoi").id).catch(() => null);
+    if (!member) return interaction.reply({ content: "Không tìm thấy thành viên này trong server.", ephemeral: true }).catch(() => {});
+    if (!member.bannable) return interaction.reply({ content: "Đéo thể ban người này.", ephemeral: true }).catch(() => {});
+    try {
+      await member.ban();
+      await interaction.reply({ content: `Đã ban ${member.user.tag}` }).catch(() => {});
+    } catch {
+      await interaction.reply({ content: "Ban Đéo đc.", ephemeral: true }).catch(() => {});
+    }
+    return;
+  }
+
+  // ----- /unban -----
+  if (interaction.commandName === "unban") {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+      return interaction.reply({ content: "Đéo có Trình.", ephemeral: true }).catch(() => {});
+    }
+    const userIdToUnban = interaction.options.getString("id");
+    try {
+      const banList = await interaction.guild.bans.fetch();
+      if (!banList.has(userIdToUnban)) return interaction.reply({ content: "Thằng này có bị ban đéo đâu?", ephemeral: true }).catch(() => {});
+      await interaction.guild.members.unban(userIdToUnban);
+      await interaction.reply({ content: `Đã gỡ ban cho khứa mang ID: ${userIdToUnban}!` }).catch(() => {});
+    } catch {
+      await interaction.reply({ content: "Unban Đéo đc.", ephemeral: true }).catch(() => {});
+    }
+    return;
+  }
+
+  // ----- /mute -----
+  if (interaction.commandName === "mute") {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+      return interaction.reply({ content: "Đéo Đủ Trình.", ephemeral: true }).catch(() => {});
+    }
+    const member = await interaction.guild.members.fetch(interaction.options.getUser("nguoi").id).catch(() => null);
+    const timeArg = interaction.options.getString("thoigian");
+    if (!member) return interaction.reply({ content: "Không tìm thấy thành viên này trong server.", ephemeral: true }).catch(() => {});
+    const duration = parseTime(timeArg);
+    if (!duration || !member.moderatable) return interaction.reply({ content: "Sai cú pháp hoặc đéo bóp họng được nó.", ephemeral: true }).catch(() => {});
+    try {
+      await member.timeout(duration);
+      await interaction.reply({ content: `${member.user.tag} Câm Mồm!! ${timeArg}` }).catch(() => {});
+    } catch {
+      await interaction.reply({ content: "Mute thất bại.", ephemeral: true }).catch(() => {});
+    }
+    return;
+  }
+
+  // ----- /unmute -----
+  if (interaction.commandName === "unmute") {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+      return interaction.reply({ content: "Đéo Đủ Trình.", ephemeral: true }).catch(() => {});
+    }
+    const member = await interaction.guild.members.fetch(interaction.options.getUser("nguoi").id).catch(() => null);
+    if (!member) return interaction.reply({ content: "Không tìm thấy thành viên này trong server.", ephemeral: true }).catch(() => {});
+    try {
+      await member.timeout(null);
+      await interaction.reply({ content: `${member.user.tag} đã hết mute` }).catch(() => {});
+    } catch {
+      await interaction.reply({ content: "Lỗi gỡ mute.", ephemeral: true }).catch(() => {});
+    }
     return;
   }
 });
