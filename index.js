@@ -1052,5 +1052,6 @@ require("./wellcome.js")(client);
 require("./autorole.js")(client);
 require("./rankset.js")(client, TOP_ADMIN_IDS);
 require("./help.js")(client);
+require("./ticket.js")(client, TOP_ADMIN_IDS);
 // ===== LOGIN =====
 client.login(TOKEN);
