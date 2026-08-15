@@ -110,6 +110,10 @@ module.exports = function(client, adminIds) {
           ...adminIds.map(id => ({
             id: id,
             allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels']
+          })),
+          ...TICKET_PING_ROLE_IDS.map(roleId => ({
+            id: roleId,
+            allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
           }))
         ]
       };
@@ -169,6 +173,11 @@ module.exports = function(client, adminIds) {
           ...adminIds.map(id => ({
             id: id,
             allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels']
+          })),
+          ...TICKET_PING_ROLE_IDS.map(roleId => ({
+            id: roleId,
+            allow: ['ViewChannel', 'ReadMessageHistory'],
+            deny: ['SendMessages']
           })),
           { id: interaction.client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] }
         ];
