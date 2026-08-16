@@ -55,7 +55,20 @@ module.exports = (client) => {
     if (oldMessage.partial) {
       try { await oldMessage.fetch(); } catch (err) { return; }
     }
-    if (oldMessage.author?.bot || oldMessage.content === newMessage.content) return;
+    if (newMessage.partial) {
+      try { await newMessage.fetch(); } catch (err) { return; }
+    }
+
+    // Bo qua neu khong biet chinh xac tac gia (thuong xay ra khi Discord tu
+    // dong sua tin nhan de them khung xem truoc link - khong phai nguoi dung sua)
+    if (!oldMessage.author?.id || oldMessage.author.bot) return;
+
+    // So sanh sau khi chuan hoa undefined/null thanh chuoi rong, tranh truong
+    // hop "noi dung cu la undefined" va "noi dung moi la chuoi rong" bi tinh
+    // la khac nhau trong khi thuc chat chu khong doi gi ca
+    const noiDungCu = oldMessage.content || "";
+    const noiDungMoi = newMessage.content || "";
+    if (noiDungCu === noiDungMoi) return;
 
     try {
       const logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
@@ -65,10 +78,10 @@ module.exports = (client) => {
         .setTitle("Tin Nhắn Bị Sửa Đổi")
         .setColor(0xffffff)
         .addFields(
-          { name: "Người sửa", value: `<@${oldMessage.author?.id}>`, inline: true },
+          { name: "Người sửa", value: `<@${oldMessage.author.id}>`, inline: true },
           { name: "Tại kênh", value: `<#${oldMessage.channel?.id}>`, inline: true },
-          { name: "Nội dung cũ", value: `\`\`\`${oldMessage.content || "Trống"}\`\`\`` },
-          { name: "Nội dung mới", value: `\`\`\`${newMessage.content || "Trống"}\`\`\`` }
+          { name: "Nội dung cũ", value: `\`\`\`${noiDungCu || "Trống"}\`\`\`` },
+          { name: "Nội dung mới", value: `\`\`\`${noiDungMoi || "Trống"}\`\`\`` }
         )
         .setTimestamp();
 
@@ -106,21 +119,68 @@ module.exports = (client) => {
         await logChannel.send({ embeds: [embedAudit] });
       }
 
-      // ĐỔI ROLE (mau trang)
+      // GAN/GO ROLE CHO 1 THANH VIEN - ghi ro role nao duoc them/go (mau trang)
       if (action === AuditLogEvent.MemberRoleUpdate) {
+        const themRole = entry.changes.find(c => c.key === '$add');
+        const goRole = entry.changes.find(c => c.key === '$remove');
+        let chiTiet = [];
+        if (themRole && themRole.new && themRole.new.length) {
+          chiTiet.push(`Đã thêm role: ${themRole.new.map(r => r.name).join(', ')}`);
+        }
+        if (goRole && goRole.new && goRole.new.length) {
+          chiTiet.push(`Đã gỡ role: ${goRole.new.map(r => r.name).join(', ')}`);
+        }
+        const moTaChiTiet = chiTiet.length ? chiTiet.join('\n') : 'Không xác định được role cụ thể';
+
         embedAudit
           .setTitle("Thành Viên Bị Thay Đổi Vai Trò")
           .setColor(0xffffff)
-          .setDescription(`Người bị chỉnh: <@${targetId}>\nAdmin thực hiện: <@${executorId}>`);
+          .setDescription(`Người bị chỉnh: <@${targetId}>\nAdmin thực hiện: <@${executorId}>\n${moTaChiTiet}`);
         await logChannel.send({ embeds: [embedAudit] });
       }
 
-      // SỬA KÊNH HOẶC CẤU HÌNH ROLE (mau trang)
-      if (action === AuditLogEvent.ChannelUpdate || action === AuditLogEvent.RoleUpdate) {
+      // SUA CHINH 1 ROLE (doi ten, mau, quyen han...) - ghi ro tung muc da doi (mau trang)
+      if (action === AuditLogEvent.RoleUpdate) {
+        const tenRole = entry.target?.name || `ID ${targetId}`;
+        let dsThayDoi = [];
+        for (const change of entry.changes || []) {
+          if (change.key === 'name') dsThayDoi.push(`Tên: \`${change.old}\` → \`${change.new}\``);
+          else if (change.key === 'color') dsThayDoi.push(`Màu: \`#${Number(change.old || 0).toString(16).padStart(6, '0')}\` → \`#${Number(change.new || 0).toString(16).padStart(6, '0')}\``);
+          else if (change.key === 'hoist') dsThayDoi.push(`Hiện riêng danh sách: \`${change.old}\` → \`${change.new}\``);
+          else if (change.key === 'mentionable') dsThayDoi.push(`Cho phép tag: \`${change.old}\` → \`${change.new}\``);
+          else if (change.key === 'permissions') dsThayDoi.push(`Đã thay đổi quyền hạn của role`);
+          else if (change.key === 'icon' || change.key === 'unicode_emoji') dsThayDoi.push(`Đã đổi biểu tượng của role`);
+          else dsThayDoi.push(`${change.key}: đã thay đổi`);
+        }
+        const moTa = dsThayDoi.length ? dsThayDoi.join('\n') : 'Không xác định được thay đổi cụ thể';
+
         embedAudit
-          .setTitle("Thay Đổi Cấu Hình Server/Kênh")
+          .setTitle("Role Bị Chỉnh Sửa")
           .setColor(0xffffff)
-          .setDescription(`Người thực hiện: <@${executorId}>`);
+          .setDescription(`Role: **${tenRole}**\nNgười thực hiện: <@${executorId}>\n${moTa}`);
+        await logChannel.send({ embeds: [embedAudit] });
+      }
+
+      // SUA CAU HINH KENH (ten, chu de, quyen xem...) - ghi ro tung muc da doi (mau trang)
+      if (action === AuditLogEvent.ChannelUpdate) {
+        const tenKenh = entry.target?.name ? `#${entry.target.name}` : `ID ${targetId}`;
+        let dsThayDoi = [];
+        for (const change of entry.changes || []) {
+          if (change.key === 'name') dsThayDoi.push(`Tên: \`${change.old}\` → \`${change.new}\``);
+          else if (change.key === 'topic') dsThayDoi.push(`Chủ đề: \`${change.old || "Trống"}\` → \`${change.new || "Trống"}\``);
+          else if (change.key === 'nsfw') dsThayDoi.push(`NSFW: \`${change.old}\` → \`${change.new}\``);
+          else if (change.key === 'permission_overwrites') dsThayDoi.push(`Đã thay đổi quyền xem/chat của kênh`);
+          else if (change.key === 'rate_limit_per_user') dsThayDoi.push(`Slowmode: \`${change.old || 0}s\` → \`${change.new || 0}s\``);
+          else if (change.key === 'bitrate') dsThayDoi.push(`Bitrate: \`${change.old}\` → \`${change.new}\``);
+          else if (change.key === 'user_limit') dsThayDoi.push(`Giới hạn người trong voice: \`${change.old || 0}\` → \`${change.new || 0}\``);
+          else dsThayDoi.push(`${change.key}: đã thay đổi`);
+        }
+        const moTa = dsThayDoi.length ? dsThayDoi.join('\n') : 'Không xác định được thay đổi cụ thể';
+
+        embedAudit
+          .setTitle("Kênh Bị Chỉnh Sửa")
+          .setColor(0xffffff)
+          .setDescription(`Kênh: **${tenKenh}**\nNgười thực hiện: <@${executorId}>\n${moTa}`);
         await logChannel.send({ embeds: [embedAudit] });
       }
 
