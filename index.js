@@ -24,7 +24,6 @@ const WEB_PORT = 3000;
 const TOKEN = process.env.TOKEN;
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 const VERIFIED_ROLE_ID = process.env.VERIFIED_ROLE_ID;
-const PREFIX = "!";
 
 // ===== CONFIG QUYỀN HỆ THỐNG =====
 const OWNER_ID = ["1517437552213098529" ,"1146359469945667644"];
@@ -322,11 +321,23 @@ client.once("ready", async () => {
 
   const commands = [
     new SlashCommandBuilder()
-      .setName("verify")
-      .setDescription("Verify Roblox")
+      .setName("info")
+      .setDescription("Xem thong tin tai khoan Roblox")
       .addStringOption(option =>
-        option.setName("username").setDescription("username roblox").setRequired(true)
+        option.setName("username").setDescription("Username Roblox can check").setRequired(true)
       ),
+    new SlashCommandBuilder()
+      .setName("ai")
+      .setDescription("Hoi AI cua Rin")
+      .addStringOption(option =>
+        option.setName("cauhoi").setDescription("Cau hoi cua ban").setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName("gocua")
+      .setDescription("Kiem tra bot con online khong"),
+    new SlashCommandBuilder()
+      .setName("ping")
+      .setDescription("Kiem tra bot con online khong"),
     new SlashCommandBuilder()
       .setName("settop")
       .setDescription("Set 1 vi tri trong 1 bang TOP")
@@ -433,6 +444,52 @@ client.once("ready", async () => {
         option.setName("nguoi").setDescription("Nguoi can go timeout").setRequired(true)
       ),
     new SlashCommandBuilder()
+      .setName("blacklist")
+      .setDescription("Quan ly danh sach blacklist")
+      .addSubcommand(sub =>
+        sub.setName("add")
+          .setDescription("Them vao blacklist")
+          .addStringOption(o => o.setName("lydo").setDescription("Ly do blacklist").setRequired(true))
+          .addUserOption(o => o.setName("nguoi").setDescription("Nguoi bi blacklist (neu co Discord)").setRequired(false))
+          .addStringOption(o => o.setName("ten").setDescription("Ten (neu khong co Discord)").setRequired(false))
+          .addAttachmentOption(o => o.setName("anh").setDescription("Anh bang chung (tuy chon)").setRequired(false))
+      )
+      .addSubcommand(sub =>
+        sub.setName("remove")
+          .setDescription("Go khoi blacklist")
+          .addUserOption(o => o.setName("nguoi").setDescription("Nguoi can go").setRequired(false))
+          .addStringOption(o => o.setName("ten").setDescription("Ten can go").setRequired(false))
+      )
+      .addSubcommand(sub =>
+        sub.setName("check")
+          .setDescription("Tra cuu blacklist")
+          .addUserOption(o => o.setName("nguoi").setDescription("Nguoi can tra cuu").setRequired(false))
+          .addStringOption(o => o.setName("ten").setDescription("Ten can tra cuu").setRequired(false))
+      )
+      .addSubcommand(sub =>
+        sub.setName("list")
+          .setDescription("Xem toan bo danh sach blacklist")
+      ),
+    new SlashCommandBuilder()
+      .setName("alliance")
+      .setDescription("Quan ly danh sach alliance")
+      .addSubcommand(sub =>
+        sub.setName("add")
+          .setDescription("Them 1 alliance moi")
+          .addStringOption(o => o.setName("tenclan").setDescription("Ten clan lien minh").setRequired(true))
+          .addUserOption(o => o.setName("nguoilienhe").setDescription("Nguoi lien he cua clan do").setRequired(true))
+          .addStringOption(o => o.setName("ghichu").setDescription("Ghi chu them (tuy chon)").setRequired(false))
+      )
+      .addSubcommand(sub =>
+        sub.setName("remove")
+          .setDescription("Go 1 alliance")
+          .addStringOption(o => o.setName("tenclan").setDescription("Ten clan can go").setRequired(true))
+      )
+      .addSubcommand(sub =>
+        sub.setName("list")
+          .setDescription("Xem toan bo danh sach alliance")
+      ),
+    new SlashCommandBuilder()
       .setName("help")
       .setDescription("Xem danh sach chuc nang va cach su dung bot")
   ].map(cmd => cmd.toJSON());
@@ -536,7 +593,7 @@ const bannedWords = [
 console.log(`Da load ${bannedWords.length} tu cam (bao gom bien the leetspeak)`);
 
 // ============================================================
-// SỰ KIỆN TIN NHẮN
+// SỰ KIỆN TIN NHẮN (chi con lai: ping-joke, chong spam, quet tu cam)
 // ============================================================
 client.on("messageCreate", async (message) => {
   if (message.author.bot || !message.guild) return;
@@ -611,121 +668,6 @@ client.on("messageCreate", async (message) => {
     }
     return; 
   }
-
-  // ===== LỆNH !ai =====
-  if (message.content.startsWith("!ai")) {
-    const question = message.content.slice(3).trim();
-    if (!question) return message.reply("Hỏi gì thì hỏi đi mày!");
-    
-    await message.channel.sendTyping();
-    
-    try {
-      const reply = await shevdev.chatbot(message.guild.id, message);
-      await message.reply(reply);
-    } catch (error) {
-      console.error("Lỗi AI:", error);
-      await message.reply("RIN AI đang bận, thử lại sau nhé!");
-    }
-    return;
-  }
-
-  // 4. PREFIX COMMANDS
-  if (!message.content.startsWith(PREFIX)) return;
-
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-  const cmd = args.shift().toLowerCase();
-  const member = message.mentions.members.first();
-
-  // === LỆNH GÕ CỬA ===
-  if (cmd === "gocua" || cmd === "ping") {
-    return message.reply("Cửa đã mở! Bot Rin vẫn online chạy tẹt ga nha ní!").catch(() => {});
-  }
-
-  // === LỆNH INFO ROBLOX ===
-  if (cmd === "info") {
-    const username = args[0];
-    if (!username) return message.reply("Nhập tên user roblox cần check ní ơi!");
-    const user = message.mentions.users.first() || message.author;
-
-    try {
-      const rbUserId = await noblox.getIdFromUsername(username);
-      const avatar = await noblox.getPlayerThumbnail(rbUserId, "420x420", "png", false, "headshot");
-      const playerInfo = await noblox.getPlayerInfo(rbUserId);
-      const joinDate = new Date(playerInfo.joinDate);
-      
-      const diffTime = Math.abs(new Date() - joinDate);
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      const diffYears = Math.floor(diffDays / 365);
-      const remainingDays = diffDays % 365;
-      let ageString = diffYears > 0 ? `${diffYears} năm ${remainingDays} ngày trước` : `${diffDays} ngày trước`;
-
-      let friendsListString = "Không có hoặc tài khoản riêng tư";
-      let attachment = null; 
-
-      try {
-        const friendsData = await noblox.getFriends(rbUserId);
-        if (friendsData && friendsData.data && friendsData.data.length > 0) {
-          const totalFriends = friendsData.data.length;
-          const validFriends = friendsData.data.filter(f => f.name && f.name.trim() !== "");
-          
-          if (validFriends.length > 0) {
-            const limitFriends = validFriends.slice(0, 4); 
-            const friendsLines = limitFriends.map((f, index) => `${index + 1}. ${f.displayName ? `${f.displayName}` : f.name}`).join(" | ");
-            friendsListString = `Tổng số bạn: ${totalFriends} người\nBạn thân đại diện: ${friendsLines}`;
-
-            const friendIds = limitFriends.map(f => f.id).filter(id => id !== undefined && id !== null);
-            if (friendIds.length > 0) {
-              try {
-                const Jimp = require("jimp");
-                const { AttachmentBuilder } = require("discord.js");
-                const thumbnails = await noblox.getPlayerThumbnail(friendIds, "150x150", "png", false, "headshot");
-                
-                if (thumbnails && thumbnails.length > 0) {
-                  const baseImage = new Jimp(thumbnails.length * 150, 150, 0x2f3136ff); 
-                  for (let i = 0; i < thumbnails.length; i++) {
-                    if (thumbnails[i] && thumbnails[i].imageUrl) {
-                      const friendImg = await Jimp.read(thumbnails[i].imageUrl);
-                      baseImage.composite(friendImg, i * 150, 0); 
-                    }
-                  }
-                  const buffer = await baseImage.getBufferAsync(Jimp.MIME_PNG);
-                  attachment = new AttachmentBuilder(buffer, { name: "friends-avatar.png" });
-                }
-              } catch (imgErr) {}
-            }
-          }
-        }
-      } catch (friendErr) {
-        friendsListString = "Không thể kiểm tra bạn bè (Danh sách bị ẩn)";
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle("THÔNG TIN TÀI KHOẢN ROBLOX")
-        .addFields(
-          { name: "Tên Trong Game (Display)", value: `${playerInfo.displayName || "Không có"}`, inline: true },
-          { name: "Tên Đăng Nhập (User)", value: `${playerInfo.username || username}`, inline: true },
-          { name: "Người Check (Discord)", value: `${user.username}`, inline: true },
-          { name: "Ngày Tạo Acc", value: `${joinDate.toLocaleDateString('vi-VN')} (${ageString})`, inline: false },
-          { name: "Mô Tả Bản Thân (Bio)", value: `${playerInfo.blurb || "Trống trơn"}`, inline: false },
-          { name: "Danh Sách Bạn Bè", value: friendsListString, inline: false }
-        )
-        .setThumbnail(user.displayAvatarURL({ dynamic: true }))
-        .setImage(avatar[0]?.imageUrl || null)
-        .setColor(0x00AE86)
-        .setFooter({ text: `Roblox ID: ${rbUserId} | Hệ thống VOL` })
-        .setTimestamp();
-
-      if (attachment) {
-        message.reply({ embeds: [embed], files: [attachment] }).catch(() => {});
-      } else {
-        message.reply({ embeds: [embed] }).catch(() => {});
-      }
-    } catch (err) {
-      console.error(err);
-      message.reply("Không tìm thấy user Roblox hoặc hệ thống gặp lỗi rồi ní ơi!").catch(() => {});
-    }
-  }
-
 });
 
 // ============================================================
@@ -813,42 +755,86 @@ client.on("guildMemberAdd", async (member) => {
   }
 });
 
-// ===== SLASH COMMANDS: VERIFY / SETTOP / TOP =====
+// ===== SLASH COMMANDS =====
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  // ----- /verify -----
-  if (interaction.commandName === "verify") {
+  // ----- /info -----
+  if (interaction.commandName === "info") {
     const username = interaction.options.getString("username");
     await interaction.deferReply().catch(() => {});
 
     try {
-      const userId = await noblox.getIdFromUsername(username);
-      const avatar = await noblox.getPlayerThumbnail(userId,"420x420","png",false,"headshot");
+      const rbUserId = await noblox.getIdFromUsername(username);
+      const avatar = await noblox.getPlayerThumbnail(rbUserId, "420x420", "png", false, "headshot");
+      const playerInfo = await noblox.getPlayerInfo(rbUserId);
+      const joinDate = new Date(playerInfo.joinDate);
 
-      const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-      if (!member) return;
-      await member.setNickname(username).catch(() => {});
+      const diffTime = Math.abs(new Date() - joinDate);
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      const diffYears = Math.floor(diffDays / 365);
+      const remainingDays = diffDays % 365;
+      let ageString = diffYears > 0 ? `${diffYears} năm ${remainingDays} ngày trước` : `${diffDays} ngày trước`;
 
-      if (VERIFIED_ROLE_ID) await member.roles.add(VERIFIED_ROLE_ID).catch(() => {});
+      let friendsListString = "Không có hoặc tài khoản riêng tư";
 
-      await interaction.editReply({ content: `Verify thanh cong!: ${username}` }).catch(() => {});
+      try {
+        const friendsData = await noblox.getFriends(rbUserId);
+        if (friendsData && friendsData.data && friendsData.data.length > 0) {
+          const totalFriends = friendsData.data.length;
+          const validFriends = friendsData.data.filter(f => f.name && f.name.trim() !== "");
 
-      const channel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-      if (!channel) return;
+          if (validFriends.length > 0) {
+            const limitFriends = validFriends.slice(0, 4);
+            const friendsLines = limitFriends.map((f, index) => `${index + 1}. ${f.displayName ? `${f.displayName}` : f.name}`).join(" | ");
+            friendsListString = `Tổng số bạn: ${totalFriends} người\nBạn thân đại diện: ${friendsLines}`;
+          }
+        }
+      } catch (friendErr) {
+        friendsListString = "Không thể kiểm tra bạn bè (Danh sách bị ẩn)";
+      }
 
       const embed = new EmbedBuilder()
-        .setAuthor({ name: username, iconURL: avatar[0].imageUrl })
-        .setTitle("Member Updated")
-        .addFields({ name: "Nickname", value: `${username} (@${interaction.user.username})` })
-        .setThumbnail(avatar[0].imageUrl)
-        .setColor("Green")
+        .setTitle("THÔNG TIN TÀI KHOẢN ROBLOX")
+        .addFields(
+          { name: "Tên Trong Game (Display)", value: `${playerInfo.displayName || "Không có"}`, inline: true },
+          { name: "Tên Đăng Nhập (User)", value: `${playerInfo.username || username}`, inline: true },
+          { name: "Người Check (Discord)", value: `${interaction.user.username}`, inline: true },
+          { name: "Ngày Tạo Acc", value: `${joinDate.toLocaleDateString('vi-VN')} (${ageString})`, inline: false },
+          { name: "Mô Tả Bản Thân (Bio)", value: `${playerInfo.blurb || "Trống trơn"}`, inline: false },
+          { name: "Danh Sách Bạn Bè", value: friendsListString, inline: false }
+        )
+        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+        .setImage(avatar[0]?.imageUrl || null)
+        .setColor(0x00AE86)
+        .setFooter({ text: `Roblox ID: ${rbUserId} | Hệ thống VOL` })
         .setTimestamp();
 
-      channel.send({ embeds: [embed] }).catch(() => {});
-    } catch {
-      await interaction.editReply({ content: "Username Roblox khong ton tai!" }).catch(() => {});
+      await interaction.editReply({ embeds: [embed] }).catch(() => {});
+    } catch (err) {
+      console.error(err);
+      await interaction.editReply("Không tìm thấy user Roblox hoặc hệ thống gặp lỗi rồi ní ơi!").catch(() => {});
     }
+    return;
+  }
+
+  // ----- /ai -----
+  if (interaction.commandName === "ai") {
+    const question = interaction.options.getString("cauhoi");
+    await interaction.deferReply().catch(() => {});
+    try {
+      const reply = await shevdev.chatbot(interaction.guild.id, interaction);
+      await interaction.editReply(reply).catch(() => {});
+    } catch (error) {
+      console.error("Lỗi AI:", error);
+      await interaction.editReply("RIN AI đang bận, thử lại sau nhé!").catch(() => {});
+    }
+    return;
+  }
+
+  // ----- /gocua & /ping -----
+  if (interaction.commandName === "gocua" || interaction.commandName === "ping") {
+    await interaction.reply("Cửa đã mở! Bot Rin vẫn online chạy tẹt ga nha ní!").catch(() => {});
     return;
   }
 
@@ -1053,5 +1039,8 @@ require("./autorole.js")(client);
 require("./rankset.js")(client, TOP_ADMIN_IDS);
 require("./help.js")(client);
 require("./ticket.js")(client, TOP_ADMIN_IDS);
+require("./blacklist.js")(client, TOP_ADMIN_IDS);
+require("./alliance.js")(client, TOP_ADMIN_IDS);
+require("./verify.js")(client, VERIFIED_ROLE_ID);
 // ===== LOGIN =====
 client.login(TOKEN);

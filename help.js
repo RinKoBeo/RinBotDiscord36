@@ -37,12 +37,41 @@ module.exports = function(client) {
         },
         {
           name: 'Ticket',
-          value: 'Bấm nút "Tạo ticket" trong kênh ticket để mở một cuộc trò chuyện riêng với đội ngũ hỗ trợ.',
+          value: 'Bấm nút "Tạo Ticket" trong kênh ticket để mở một cuộc trò chuyện riêng với đội ngũ hỗ trợ.',
           inline: false
         },
         {
           name: 'Roblox',
-          value: '/verify username — Liên kết tài khoản Roblox với Discord của bạn',
+          value: '/info username — Xem thông tin tài khoản Roblox',
+          inline: false
+        },
+        {
+          name: 'Xác Nhận Thành Viên',
+          value: 'Bấm nút "Nhận Role" trong kênh xác nhận để tự động nhận role thành viên.',
+          inline: false
+        },
+        {
+          name: 'Blacklist',
+          value:
+            '/blacklist add nguoi/ten lydo anh — Chỉ Admin: thêm vào blacklist\n' +
+            '/blacklist remove nguoi/ten — Chỉ Admin: gỡ khỏi blacklist\n' +
+            '/blacklist check nguoi/ten — Chỉ Admin: tra cứu blacklist\n' +
+            '/blacklist list — Chỉ Admin: xem toàn bộ danh sách',
+          inline: false
+        },
+        {
+          name: 'Alliance',
+          value:
+            '/alliance add tenclan nguoilienhe ghichu — Chỉ Admin: thêm alliance mới\n' +
+            '/alliance remove tenclan — Chỉ Admin: gỡ một alliance\n' +
+            '/alliance list — Chỉ Admin: xem toàn bộ danh sách',
+          inline: false
+        },
+        {
+          name: 'Khác',
+          value:
+            '/ai cauhoi — Hỏi AI của Rin\n' +
+            '/gocua hoặc /ping — Kiểm tra bot còn online không',
           inline: false
         }
       )
