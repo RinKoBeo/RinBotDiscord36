@@ -4,9 +4,8 @@ const fs = require('fs');
 const path = require('path');
 
 const DATA_FILE = path.join(__dirname, 'blacklist_data.json');
-const BLACKLIST_CHANNEL_ID = '1532713933800996864'; // 👈 Điền ID kênh log blacklist vào đây
+const BLACKLIST_CHANNEL_ID = '1532713933800996864'; // Kênh log
 
-// ===== LOCK ĐỂ TRÁNH RACE CONDITION =====
 let isWriting = false;
 
 function readData() {
@@ -41,9 +40,8 @@ function layKhoa(nguoi, ten) {
   return null;
 }
 
-// ===== CẢNH BÁO NẾU CHƯA SET CHANNEL ID =====
 if (!BLACKLIST_CHANNEL_ID) {
-  console.warn('CHUA SET BLACKLIST_CHANNEL_ID trong blacklist.js!');
+  console.warn('⚠️ CHUA SET BLACKLIST_CHANNEL_ID trong blacklist.js!');
 }
 
 module.exports = function(client, adminIds) {
@@ -60,6 +58,7 @@ module.exports = function(client, adminIds) {
           .addUserOption(opt => opt.setName('nguoi').setDescription('Người bị blacklist'))
           .addStringOption(opt => opt.setName('ten').setDescription('Tên (nếu không có user)'))
           .addStringOption(opt => opt.setName('lydo').setDescription('Lý do').setRequired(true))
+          .addStringOption(opt => opt.setName('thoihan').setDescription('Thời hạn (mặc định: Vĩnh viễn)').setRequired(false))
           .addAttachmentOption(opt => opt.setName('proof').setDescription('Proof (ảnh)'))
         )
         .addSubcommand(sub => sub
@@ -84,7 +83,7 @@ module.exports = function(client, adminIds) {
         Routes.applicationCommands(client.user.id),
         { body: [command.toJSON()] }
       );
-      console.log('Đã đăng ký slash command /blacklist');
+      console.log(' Đã đăng ký slash command /blacklist');
     } catch (err) {
       console.error(' Lỗi đăng ký blacklist:', err);
     }
@@ -96,10 +95,10 @@ module.exports = function(client, adminIds) {
     if (interaction.isButton() && interaction.customId.startsWith('blacklist_view_proof_')) {
       const key = interaction.customId.replace('blacklist_view_proof_', '');
       const data = readData();
-      // Tìm entry theo userId hoặc ten
+
+      // Tìm entry theo key (có thể là userId hoặc ten)
       let entry = data[key];
       if (!entry) {
-        // fallback: tìm qua userId hoặc ten trong data
         for (const k of Object.keys(data)) {
           const e = data[k];
           if (e.userId === key || e.ten === key) {
@@ -108,12 +107,13 @@ module.exports = function(client, adminIds) {
           }
         }
       }
+
       if (!entry || !entry.proof) {
         return interaction.reply({ content: 'Không tìm thấy proof cho mục này.', ephemeral: true });
       }
 
       const embed = new EmbedBuilder()
-        .setTitle('PROOF')
+        .setTitle(' PROOF')
         .setImage(entry.proof)
         .setColor(0xffffff)
         .setTimestamp();
@@ -127,7 +127,7 @@ module.exports = function(client, adminIds) {
     if (interaction.commandName !== 'blacklist') return;
 
     if (!adminIds.includes(interaction.user.id)) {
-      return interaction.reply({ content: 'Bạn không có quyền dùng lệnh này!', ephemeral: true }).catch(() => {});
+      return interaction.reply({ content: 'Bạn không có quyền dùng lệnh này!', ephemeral: true });
     }
 
     await interaction.deferReply({ ephemeral: true });
@@ -141,9 +141,9 @@ module.exports = function(client, adminIds) {
       const nguoi = interaction.options.getUser('nguoi');
       const ten = interaction.options.getString('ten');
       const lydo = interaction.options.getString('lydo');
+      const thoihan = interaction.options.getString('thoihan') || 'Vĩnh viễn';
       const proof = interaction.options.getAttachment('proof');
 
-      // Kiểm tra proof đúng cách
       if (proof && !proof.contentType?.startsWith('image/')) {
         return interaction.editReply({ content: 'Proof phải là file ảnh (png, jpg, gif, webp).' });
       }
@@ -161,7 +161,8 @@ module.exports = function(client, adminIds) {
       data[khoa] = {
         userId: nguoi ? nguoi.id : null,
         ten: ten || (nguoi ? nguoi.tag : ''),
-        lydo: lydo,
+        resson: lydo,
+        thoihan: thoigian,
         proof: proof ? proof.url : null,
         nguoiThem: interaction.user.id,
         thoiGian: Date.now()
@@ -169,11 +170,12 @@ module.exports = function(client, adminIds) {
       await saveData(data);
 
       const embed = new EmbedBuilder()
-        .setTitle(' ĐÃ THÊM VÀO BLACKLIST')
+        .setTitle('ADDED TO BLACKLIST')
         .setColor(0xFF0000)
         .addFields(
           { name: 'Target', value: nguoi ? `<@${nguoi.id}>` : ten, inline: true },
           { name: 'Reason', value: lydo, inline: true },
+          { name: 'Time', value: thoihan, inline: true },
           { name: 'Added by', value: `<@${interaction.user.id}>`, inline: true }
         )
         .setTimestamp();
@@ -185,7 +187,7 @@ module.exports = function(client, adminIds) {
       const row = proof ? new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`blacklist_view_proof_${customId}`)
-          .setLabel('Xem Proof')
+          .setLabel(' Xem Proof')
           .setStyle(ButtonStyle.Primary)
       ) : null;
 
@@ -254,13 +256,13 @@ module.exports = function(client, adminIds) {
       }
 
       const embed = new EmbedBuilder()
-        .setTitle(' BLACKLIST')
+        .setTitle('KẾT QUẢ BLACKLIST')
         .setColor(0xffffff)
         .addFields(
           { name: 'Target', value: entry.userId ? `<@${entry.userId}>` : entry.ten, inline: true },
           { name: 'Reason', value: entry.lydo, inline: true },
-          { name: 'Added by', value: `<@${entry.nguoiThem}>`, inline: true },
-          { name: 'Time', value: `<t:${Math.floor(entry.thoiGian/1000)}:F>`, inline: true }
+          { name: 'Time', value: entry.thoihan || 'Vĩnh viễn', inline: true },
+          { name: 'Added by', value: `<@${entry.nguoiThem}>`, inline: true }
         )
         .setTimestamp();
 
@@ -269,7 +271,7 @@ module.exports = function(client, adminIds) {
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`blacklist_view_proof_${entry.userId || entry.ten}`)
-            .setLabel('🔍 Xem Proof')
+            .setLabel('Xem Proof')
             .setStyle(ButtonStyle.Primary)
         );
         return interaction.editReply({ embeds: [embed], components: [row] });
@@ -301,7 +303,8 @@ module.exports = function(client, adminIds) {
         for (const k of pageKeys) {
           const e = data[k];
           const doiTuong = e.userId ? `<@${e.userId}>` : e.ten;
-          moTa += `**${doiTuong}** — ${e.lydo}\n`;
+          const time = e.thoihan || 'Vĩnh viễn';
+          moTa += `**${doiTuong}** — ${e.lydo} (Thời hạn: ${time})\n`;
         }
 
         const embed = new EmbedBuilder()
