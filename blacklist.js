@@ -55,11 +55,11 @@ module.exports = function(client, adminIds) {
       saveData(data);
 
       const embed = new EmbedBuilder()
-        .setTitle('Đã Thêm Vào Blacklist')
-        .setColor(0xffffff)
+        .setTitle('Added to Blacklist')
+        .setColor(0xFF0000)
         .addFields(
           { name: 'Đối tượng', value: nguoi ? `<@${nguoi.id}>` : ten, inline: true },
-          { name: 'Lý do', value: lydo, inline: true },
+          { name: 'Resson', value: lydo, inline: true },
           { name: 'Người thêm', value: `<@${interaction.user.id}>`, inline: true }
         );
       if (anh) embed.setImage(anh.url);
