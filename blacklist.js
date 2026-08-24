@@ -1,13 +1,7 @@
+// ============================================================
 // blacklist.js - QUẢN LÝ BLACKLIST
 // Discord.js v14
-// - /blacklist add: thêm blacklist, Proof bắt buộc
-// - /blacklist remove: gỡ blacklist
-// - /blacklist check: kiểm tra blacklist
-// - /blacklist list: danh sách công khai cho toàn server
-// - Proof chỉ người bấm nút mới xem được
-// - Bảng thông tin hiển thị theo hàng dọc
-// - Có pagination
-// - Dữ liệu lưu vào blacklist_data.json
+// ============================================================
 
 const {
   EmbedBuilder,
@@ -22,12 +16,17 @@ const {
 const fs = require('fs');
 const path = require('path');
 
-const DATA_FILE = path.join(__dirname, 'blacklist_data.json');
+// ============================================================
+// CONFIG
+// ============================================================
+
+const DATA_FILE = path.join(
+  __dirname,
+  'blacklist_data.json'
+);
 
 // Kênh log blacklist
 const BLACKLIST_CHANNEL_ID = '1532713933800996864';
-
-let isWriting = false;
 
 // ============================================================
 // ĐỌC DATA
@@ -39,9 +38,15 @@ function readData() {
   }
 
   try {
-    return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    return JSON.parse(
+      fs.readFileSync(DATA_FILE, 'utf8')
+    );
   } catch (err) {
-    console.error(' Không thể đọc blacklist_data.json:', err);
+    console.error(
+      ' Lỗi đọc blacklist_data.json:',
+      err
+    );
+
     return {};
   }
 }
@@ -51,32 +56,22 @@ function readData() {
 // ============================================================
 
 function saveData(data) {
-  return new Promise((resolve, reject) => {
-    const waitForLock = () => {
-      if (isWriting) {
-        setTimeout(waitForLock, 50);
-        return;
-      }
+  try {
+    fs.writeFileSync(
+      DATA_FILE,
+      JSON.stringify(data, null, 2),
+      'utf8'
+    );
 
-      isWriting = true;
+    return true;
+  } catch (err) {
+    console.error(
+      ' Lỗi lưu blacklist_data.json:',
+      err
+    );
 
-      try {
-        fs.writeFileSync(
-          DATA_FILE,
-          JSON.stringify(data, null, 2),
-          'utf8'
-        );
-
-        isWriting = false;
-        resolve();
-      } catch (err) {
-        isWriting = false;
-        reject(err);
-      }
-    };
-
-    waitForLock();
-  });
+    return false;
+  }
 }
 
 // ============================================================
@@ -88,7 +83,7 @@ function layKhoa(nguoi, ten) {
     return `user:${nguoi.id}`;
   }
 
-  if (ten) {
+  if (ten && ten.trim()) {
     return `ten:${ten.trim().toLowerCase()}`;
   }
 
@@ -96,862 +91,254 @@ function layKhoa(nguoi, ten) {
 }
 
 // ============================================================
-// ESCAPE CUSTOM ID
+// MÃ HÓA KEY CHO BUTTON
+// Tránh customId bị lỗi do tên có ký tự đặc biệt
 // ============================================================
 
-function taoProofCustomId(entry) {
-  if (entry.userId) {
-    return `blacklist_view_proof_user_${entry.userId}`;
-  }
+function encodeKey(key) {
+  return Buffer
+    .from(key, 'utf8')
+    .toString('base64url');
+}
 
-  // Với tên, dùng key để tránh customId chứa ký tự lạ
-  return `blacklist_view_proof_key_${Buffer
-    .from(entry.key || '')
-    .toString('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')}`;
+function decodeKey(value) {
+  try {
+    return Buffer
+      .from(value, 'base64url')
+      .toString('utf8');
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================
-// TÌM ENTRY THEO KEY
+// TẠO CUSTOM ID PROOF
 // ============================================================
 
-function timEntryTheoKey(data, key) {
-  if (data[key]) {
-    return {
-      key,
-      entry: data[key]
-    };
-  }
-
-  return null;
+function taoProofCustomId(key) {
+  return `blacklist_proof_${encodeKey(key)}`;
 }
 
 // ============================================================
-// TÌM ENTRY THEO USER ID
+// TÌM ENTRY TỪ CUSTOM ID
 // ============================================================
 
-function timEntryTheoUserId(data, userId) {
-  for (const [key, entry] of Object.entries(data)) {
-    if (entry.userId === userId) {
-      return {
-        key,
-        entry
-      };
-    }
+function layEntryTuButton(customId) {
+  const prefix = 'blacklist_proof_';
+
+  if (!customId.startsWith(prefix)) {
+    return null;
   }
 
-  return null;
-}
-
-// ============================================================
-// TÌM ENTRY THEO CUSTOM ID PROOF
-// ============================================================
-
-function timEntryProof(data, customId) {
-  if (customId.startsWith('blacklist_view_proof_user_')) {
-    const userId = customId.replace(
-      'blacklist_view_proof_user_',
-      ''
-    );
-
-    return timEntryTheoUserId(data, userId);
-  }
-
-  if (customId.startsWith('blacklist_view_proof_key_')) {
-    const encoded = customId.replace(
-      'blacklist_view_proof_key_',
-      ''
-    );
-
-    try {
-      const key = Buffer
-        .from(encoded.replace(/-/g, '+').replace(/_/g, '/'), 'base64')
-        .toString('utf8');
-
-      return timEntryTheoKey(data, key);
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-}
-
-// ============================================================
-// TẠO BUTTON PROOF
-// ============================================================
-
-function taoProofButton(entry, key) {
-  const customId = taoProofCustomId({
-    ...entry,
-    key
-  });
-
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(customId)
-      .setLabel('🔎 Xem Proof')
-      .setStyle(ButtonStyle.Primary)
+  const encoded = customId.slice(
+    prefix.length
   );
+
+  const key = decodeKey(encoded);
+
+  if (!key) {
+    return null;
+  }
+
+  const data = readData();
+
+  if (!data[key]) {
+    return null;
+  }
+
+  return {
+    key,
+    entry: data[key]
+  };
 }
 
 // ============================================================
-// TẠO EMBED BLACKLIST
+// TẠO NÚT PROOF
 // ============================================================
 
-function taoBlacklistEmbed(entry, title = ' BLACKLIST') {
-  const target = entry.userId
-    ? `<@${entry.userId}>`
-    : (entry.ten || 'Không xác định');
+function taoProofButton(key) {
+  return new ButtonBuilder()
+    .setCustomId(
+      taoProofCustomId(key)
+    )
+    .setLabel('Proof')
+    
+    .setStyle(ButtonStyle.Primary);
+}
 
-  const reason = entry.lydo || entry.resson || 'Không có lý do';
+// ============================================================
+// TẠO EMBED ADD
+// ============================================================
 
-  const thoihan = entry.thoihan || 'Vĩnh viễn';
-
-  const addedBy = entry.nguoiThem
-    ? `<@${entry.nguoiThem}>`
-    : 'Không xác định';
-
-  return new EmbedBuilder()
-    .setTitle(title)
+function taoEmbedAdd(entry) {
+  const embed = new EmbedBuilder()
+    .setTitle('ADDED TO BLACKLIST')
     .setColor(0xFF0000)
     .addFields(
       {
         name: ' Target',
-        value: String(target),
+        value: entry.userId
+          ? `<@${entry.userId}>`
+          : String(entry.ten || 'Không có'),
         inline: false
       },
       {
         name: ' Reason',
-        value: String(reason),
+        value: String(
+          entry.lydo || 'Không có'
+        ).slice(0, 1024),
         inline: false
       },
       {
-        name: ' Thời hạn',
-        value: String(thoihan),
+        name: ' Time',
+        value: String(
+          entry.thoihan || 'Vĩnh viễn'
+        ).slice(0, 1024),
         inline: false
       },
       {
-        name: ' Added by',
-        value: String(addedBy),
+        name: 'Added by',
+        value: entry.nguoiThem
+          ? `<@${entry.nguoiThem}>`
+          : 'Không xác định',
         inline: false
       }
     )
-    .setFooter({
-      text: 'Proof được bảo mật — chỉ người bấm nút mới xem được.'
-    })
     .setTimestamp(
       entry.thoiGian
         ? new Date(entry.thoiGian)
         : new Date()
     );
+
+  if (entry.proof) {
+    embed.setImage(entry.proof);
+  }
+
+  return embed;
 }
 
 // ============================================================
-// MODULE
+// TẠO EMBED CHECK
 // ============================================================
 
-module.exports = function(client, adminIds) {
-
-  // ============================================================
-  // ĐĂNG KÝ SLASH COMMAND
-  // ============================================================
-
-  client.once('ready', async () => {
-    try {
-      const command = new SlashCommandBuilder()
-        .setName('blacklist')
-        .setDescription('Quản lý danh sách đen');
-
-      // --------------------------------------------------------
-      // ADD
-      // --------------------------------------------------------
-
-      command.addSubcommand(sub =>
-        sub
-          .setName('add')
-          .setDescription('Thêm một người vào blacklist')
-
-          .addUserOption(opt =>
-            opt
-              .setName('nguoi')
-              .setDescription('Người bị blacklist')
-              .setRequired(false)
-          )
-
-          .addStringOption(opt =>
-            opt
-              .setName('ten')
-              .setDescription('Tên nếu không chọn user')
-              .setRequired(false)
-          )
-
-          .addStringOption(opt =>
-            opt
-              .setName('lydo')
-              .setDescription('Lý do blacklist')
-              .setRequired(true)
-          )
-
-          .addStringOption(opt =>
-            opt
-              .setName('thoihan')
-              .setDescription('Thời hạn, ví dụ: 7 ngày / 30 ngày / Vĩnh viễn')
-              .setRequired(false)
-          )
-
-          .addAttachmentOption(opt =>
-            opt
-              .setName('proof')
-              .setDescription('Proof bắt buộc - chỉ nhận ảnh')
-              .setRequired(true)
-          )
-      );
-
-      // --------------------------------------------------------
-      // REMOVE
-      // --------------------------------------------------------
-
-      command.addSubcommand(sub =>
-        sub
-          .setName('remove')
-          .setDescription('Gỡ một người khỏi blacklist')
-
-          .addUserOption(opt =>
-            opt
-              .setName('nguoi')
-              .setDescription('Người cần gỡ')
-              .setRequired(false)
-          )
-
-          .addStringOption(opt =>
-            opt
-              .setName('ten')
-              .setDescription('Tên nếu không chọn user')
-              .setRequired(false)
-          )
-      );
-
-      // --------------------------------------------------------
-      // CHECK
-      // --------------------------------------------------------
-
-      command.addSubcommand(sub =>
-        sub
-          .setName('check')
-          .setDescription('Kiểm tra blacklist')
-
-          .addUserOption(opt =>
-            opt
-              .setName('nguoi')
-              .setDescription('Người cần kiểm tra')
-              .setRequired(false)
-          )
-
-          .addStringOption(opt =>
-            opt
-              .setName('ten')
-              .setDescription('Tên nếu không chọn user')
-              .setRequired(false)
-          )
-      );
-
-      // --------------------------------------------------------
-      // LIST
-      // --------------------------------------------------------
-
-      command.addSubcommand(sub =>
-        sub
-          .setName('list')
-          .setDescription('Xem danh sách blacklist')
-      );
-
-      const rest = new REST({
-        version: '10'
-      }).setToken(process.env.TOKEN);
-
-      await rest.put(
-        Routes.applicationCommands(client.user.id),
-        {
-          body: [command.toJSON()]
-        }
-      );
-
-      console.log(' Đã đăng ký slash command /blacklist');
-
-    } catch (err) {
-      console.error(' Lỗi đăng ký blacklist:', err);
-    }
-  });
-
-  // ============================================================
-  // INTERACTION
-  // ============================================================
-
-  client.on('interactionCreate', async interaction => {
-
-    // ==========================================================
-    // BUTTON PROOF
-    // ==========================================================
-
-    if (
-      interaction.isButton() &&
-      interaction.customId.startsWith('blacklist_view_proof_')
-    ) {
-      try {
-        const data = readData();
-
-        const result = timEntryProof(
-          data,
-          interaction.customId
-        );
-
-        if (!result || !result.entry) {
-          return interaction.reply({
-            content: ' Không tìm thấy blacklist hoặc proof.',
-            ephemeral: true
-          });
-        }
-
-        const entry = result.entry;
-
-        if (!entry.proof) {
-          return interaction.reply({
-            content: ' Mục blacklist này không có proof.',
-            ephemeral: true
-          });
-        }
-
-        // QUAN TRỌNG:
-        // ephemeral = true
-        // Chỉ người bấm nút mới thấy
-        const embed = new EmbedBuilder()
-          .setTitle(' PROOF BLACKLIST')
-          .setColor(0xFFFFFF)
-          .setImage(entry.proof)
-          .setFooter({
-            text: 'Proof này chỉ hiển thị cho bạn.'
-          })
-          .setTimestamp();
-
-        return interaction.reply({
-          embeds: [embed],
-          ephemeral: true
-        });
-
-      } catch (err) {
-        console.error(' Lỗi xem proof:', err);
-
-        if (!interaction.replied && !interaction.deferred) {
-          return interaction.reply({
-            content: ' Có lỗi xảy ra khi xem proof.',
-            ephemeral: true
-          });
-        }
+function taoEmbedCheck(entry) {
+  const embed = new EmbedBuilder()
+    .setTitle(' KẾT QUẢ BLACKLIST')
+    .setColor(0xFFFFFF)
+    .addFields(
+      {
+        name: ' Target',
+        value: entry.userId
+          ? `<@${entry.userId}>`
+          : String(entry.ten || 'Không có'),
+        inline: false
+      },
+      {
+        name: ' Reason',
+        value: String(
+          entry.lydo || 'Không có'
+        ).slice(0, 1024),
+        inline: false
+      },
+      {
+        name: '⏱ Time',
+        value: String(
+          entry.thoihan || 'Vĩnh viễn'
+        ).slice(0, 1024),
+        inline: false
+      },
+      {
+        name: ' Added by',
+        value: entry.nguoiThem
+          ? `<@${entry.nguoiThem}>`
+          : 'Không xác định',
+        inline: false
       }
-    }
-
-    // ==========================================================
-    // BUTTON PAGINATION
-    // ==========================================================
-
-    if (
-      interaction.isButton() &&
-      interaction.customId.startsWith('blacklist_page_')
-    ) {
-      try {
-        const parts = interaction.customId.split('_');
-
-        const action = parts[2];
-        const page = parseInt(parts[3]);
-
-        if (
-          Number.isNaN(page) ||
-          !['prev', 'next'].includes(action)
-        ) {
-          return interaction.reply({
-            content: ' Nút không hợp lệ.',
-            ephemeral: true
-          });
-        }
-
-        const data = readData();
-        const keys = Object.keys(data);
-
-        const ITEMS_PER_PAGE = 5;
-        const totalPages = Math.max(
-          1,
-          Math.ceil(keys.length / ITEMS_PER_PAGE)
-        );
-
-        let newPage = page;
-
-        if (action === 'prev') {
-          newPage = page - 1;
-        }
-
-        if (action === 'next') {
-          newPage = page + 1;
-        }
-
-        newPage = Math.max(
-          0,
-          Math.min(newPage, totalPages - 1)
-        );
-
-        const embed = taoListEmbed(
-          data,
-          keys,
-          newPage,
-          ITEMS_PER_PAGE,
-          totalPages
-        );
-
-        const row = taoPaginationButtons(
-          newPage,
-          totalPages
-        );
-
-        return interaction.update({
-          embeds: [embed],
-          components: row ? [row] : []
-        });
-
-      } catch (err) {
-        console.error(' Lỗi pagination blacklist:', err);
-
-        if (!interaction.replied && !interaction.deferred) {
-          return interaction.reply({
-            content: ' Không thể chuyển trang.',
-            ephemeral: true
-          });
-        }
-      }
-    }
-
-    // ==========================================================
-    // CHỈ NHẬN SLASH COMMAND
-    // ==========================================================
-
-    if (!interaction.isChatInputCommand()) {
-      return;
-    }
-
-    if (interaction.commandName !== 'blacklist') {
-      return;
-    }
-
-    // ==========================================================
-    // CHECK ADMIN
-    // ==========================================================
-
-    if (!adminIds.includes(interaction.user.id)) {
-      return interaction.reply({
-        content: ' Bạn không có quyền sử dụng lệnh này!',
-        ephemeral: true
-      });
-    }
-
-    const subCmd = interaction.options.getSubcommand();
-
-    // ==========================================================
-    // ADD
-    // ==========================================================
-
-    if (subCmd === 'add') {
-
-      await interaction.deferReply({
-        ephemeral: true
-      });
-
-      const nguoi = interaction.options.getUser('nguoi');
-      const ten = interaction.options.getString('ten');
-      const lydo = interaction.options.getString('lydo');
-      const thoihan =
-        interaction.options.getString('thoihan') ||
-        'Vĩnh viễn';
-
-      const proof =
-        interaction.options.getAttachment('proof');
-
-      // --------------------------------------------------------
-      // BẮT BUỘC TARGET
-      // --------------------------------------------------------
-
-      const khoa = layKhoa(
-        nguoi,
-        ten
-      );
-
-      if (!khoa) {
-        return interaction.editReply({
-          content:
-            ' Bạn phải chọn **Người** hoặc nhập **Tên**.'
-        });
-      }
-
-      // --------------------------------------------------------
-      // BẮT BUỘC PROOF
-      // --------------------------------------------------------
-
-      if (!proof) {
-        return interaction.editReply({
-          content:
-            ' Bạn phải cung cấp **Proof** (file ảnh).'
-        });
-      }
-
-      // --------------------------------------------------------
-      // PROOF PHẢI LÀ ẢNH
-      // --------------------------------------------------------
-
-      if (
-        !proof.contentType ||
-        !proof.contentType.startsWith('image/')
-      ) {
-        return interaction.editReply({
-          content:
-            ' Proof phải là file ảnh: PNG, JPG, JPEG, GIF hoặc WEBP.'
-        });
-      }
-
-      const data = readData();
-
-      // --------------------------------------------------------
-      // KIỂM TRA TRÙNG
-      // --------------------------------------------------------
-
-      if (data[khoa]) {
-        return interaction.editReply({
-          content:
-            ' Đối tượng này đã có trong blacklist!'
-        });
-      }
-
-      // --------------------------------------------------------
-      // LƯU DATA
-      // --------------------------------------------------------
-
-      data[khoa] = {
-        userId: nguoi
-          ? nguoi.id
-          : null,
-
-        ten: ten ||
-          (nguoi
-            ? nguoi.tag
-            : ''),
-
-        lydo: lydo,
-
-        thoihan: thoihan,
-
-        proof: proof.url,
-
-        nguoiThem:
-          interaction.user.id,
-
-        thoiGian:
-          Date.now()
-      };
-
-      await saveData(data);
-
-      // --------------------------------------------------------
-      // EMBED
-      // --------------------------------------------------------
-
-      const embed =
-        taoBlacklistEmbed(
-          data[khoa],
-          ' ĐÃ THÊM VÀO BLACKLIST'
-        );
-
-      // --------------------------------------------------------
-      // BUTTON PROOF
-      // --------------------------------------------------------
-
-      const row =
-        taoProofButton(
-          data[khoa],
-          khoa
-        );
-
-      // --------------------------------------------------------
-      // TRẢ VỀ CHO ADMIN
-      // --------------------------------------------------------
-
-      await interaction.editReply({
-        embeds: [embed],
-        components: [row]
-      });
-
-      // --------------------------------------------------------
-      // LOG KÊNH BLACKLIST
-      // --------------------------------------------------------
-
-      if (BLACKLIST_CHANNEL_ID) {
-
-        const channel =
-          interaction.guild.channels.cache.get(
-            BLACKLIST_CHANNEL_ID
-          );
-
-        if (channel) {
-
-          await channel.send({
-            embeds: [embed],
-            components: [row]
-          }).catch(err => {
-            console.error(
-              ' Không gửi được blacklist log:',
-              err
-            );
-          });
-
-        }
-      }
-
-      return;
-    }
-
-    // ==========================================================
-    // REMOVE
-    // ==========================================================
-
-    if (subCmd === 'remove') {
-
-      await interaction.deferReply({
-        ephemeral: true
-      });
-
-      const nguoi =
-        interaction.options.getUser('nguoi');
-
-      const ten =
-        interaction.options.getString('ten');
-
-      const khoa =
-        layKhoa(
-          nguoi,
-          ten
-        );
-
-      if (!khoa) {
-        return interaction.editReply({
-          content:
-            ' Bạn phải chọn **Người** hoặc nhập **Tên**.'
-        });
-      }
-
-      const data =
-        readData();
-
-      if (!data[khoa]) {
-        return interaction.editReply({
-          content:
-            ' Không tìm thấy đối tượng trong blacklist.'
-        });
-      }
-
-      const oldEntry =
-        data[khoa];
-
-      delete data[khoa];
-
-      await saveData(data);
-
-      const target =
-        oldEntry.userId
-          ? `<@${oldEntry.userId}>`
-          : oldEntry.ten;
-
-      const embed =
-        new EmbedBuilder()
-          .setTitle(' ĐÃ GỠ KHỎI BLACKLIST')
-          .setColor(0x00FF00)
-          .addFields(
-            {
-              name: 'Target',
-              value: String(target),
-              inline: false
-            },
-            {
-              name: 'Removed by',
-              value: `<@${interaction.user.id}>`,
-              inline: false
-            }
-          )
-          .setTimestamp();
-
-      await interaction.editReply({
-        embeds: [embed]
-      });
-
-      // Log
-      if (BLACKLIST_CHANNEL_ID) {
-
-        const channel =
-          interaction.guild.channels.cache.get(
-            BLACKLIST_CHANNEL_ID
-          );
-
-        if (channel) {
-          await channel.send({
-            embeds: [embed]
-          }).catch(() => {});
-        }
-      }
-
-      return;
-    }
-
-    // ==========================================================
-    // CHECK
-    // ==========================================================
-
-    if (subCmd === 'check') {
-
-      await interaction.deferReply({
-        ephemeral: true
-      });
-
-      const nguoi =
-        interaction.options.getUser('nguoi');
-
-      const ten =
-        interaction.options.getString('ten');
-
-      const khoa =
-        layKhoa(
-          nguoi,
-          ten
-        );
-
-      if (!khoa) {
-        return interaction.editReply({
-          content:
-            ' Bạn phải chọn **Người** hoặc nhập **Tên**.'
-        });
-      }
-
-      const data =
-        readData();
-
-      let result =
-        timEntryTheoKey(
-          data,
-          khoa
-        );
-
-      // Nếu tìm bằng tên nhưng data key khác
-      if (!result && nguoi) {
-        result =
-          timEntryTheoUserId(
-            data,
-            nguoi.id
-          );
-      }
-
-      if (!result) {
-        return interaction.editReply({
-          content:
-            ' Đối tượng này **không có trong blacklist**.'
-        });
-      }
-
-      const embed =
-        taoBlacklistEmbed(
-          result.entry,
-          '🔎 KẾT QUẢ BLACKLIST'
-        );
-
-      const row =
-        taoProofButton(
-          result.entry,
-          result.key
-        );
-
-      return interaction.editReply({
-        embeds: [embed],
-        components: [row]
-      });
-    }
-
-    // ==========================================================
-    // LIST
-    // ==========================================================
-
-    if (subCmd === 'list') {
-
-      // QUAN TRỌNG:
-      // KHÔNG ephemeral
-      // => Tất cả người trong server đều xem được
-      await interaction.deferReply({
-        ephemeral: false
-      });
-
-      const data =
-        readData();
-
-      const keys =
-        Object.keys(data);
-
-      if (keys.length === 0) {
-        return interaction.editReply({
-          content:
-            '📭 Blacklist hiện đang trống.'
-        });
-      }
-
-      const ITEMS_PER_PAGE = 5;
-
-      const totalPages =
-        Math.ceil(
-          keys.length /
-          ITEMS_PER_PAGE
-        );
-
-      const currentPage = 0;
-
-      const embed =
-        taoListEmbed(
-          data,
-          keys,
-          currentPage,
-          ITEMS_PER_PAGE,
-          totalPages
-        );
-
-      const row =
-        taoPaginationButtons(
-          currentPage,
-          totalPages
-        );
-
-      await interaction.editReply({
-        embeds: [embed],
-        components: row ? [row] : []
-      });
-
-      return;
-    }
-  });
-};
+    )
+    .setTimestamp(
+      entry.thoiGian
+        ? new Date(entry.thoiGian)
+        : new Date()
+    );
+
+  return embed;
+}
 
 // ============================================================
 // TẠO EMBED LIST
 // ============================================================
 
-function taoListEmbed(
+function taoEmbedList(
   data,
   keys,
   page,
   itemsPerPage,
   totalPages
 ) {
+  const start =
+    page * itemsPerPage;
+
+  const end =
+    Math.min(
+      start + itemsPerPage,
+      keys.length
+    );
+
+  const pageKeys =
+    keys.slice(start, end);
+
+  const embed = new EmbedBuilder()
+    .setTitle(
+      ` DANH SÁCH BLACKLIST`
+    )
+    .setDescription(
+      `Trang **${page + 1}/${totalPages}**\n\n` +
+      ` Proof được bảo mật. Bấm nút **Proof** bên dưới để xem.`
+    )
+    .setColor(0xFFFFFF)
+    .setTimestamp();
+
+  for (let index = 0; index < pageKeys.length; index++) {
+    const key = pageKeys[index];
+    const entry = data[key];
+
+    const target = entry.userId
+      ? `<@${entry.userId}>`
+      : String(entry.ten || 'Không có');
+
+    const reason = String(
+      entry.lydo || 'Không có'
+    ).slice(0, 900);
+
+    const time = String(
+      entry.thoihan || 'Vĩnh viễn'
+    ).slice(0, 900);
+
+    embed.addFields({
+      name:
+        ` #${start + index + 1} — ${target}`,
+      value:
+        `** Lý do:** ${reason}\n` +
+        `**⏱ Thời hạn:** ${time}`,
+      inline: false
+    });
+  }
+
+  return embed;
+}
+
+// ============================================================
+// TẠO BUTTON LIST
+// ============================================================
+
+function taoListComponents(
+  data,
+  keys,
+  page,
+  itemsPerPage,
+  totalPages
+) {
+  const components = [];
 
   const start =
     page * itemsPerPage;
@@ -963,140 +350,1295 @@ function taoListEmbed(
     );
 
   const pageKeys =
-    keys.slice(
-      start,
-      end
-    );
+    keys.slice(start, end);
 
-  const embed =
-    new EmbedBuilder()
-      .setTitle(
-        ` DANH SÁCH BLACKLIST`
-      )
-      .setColor(0xFF0000)
-      .setDescription(
-        `**Trang ${page + 1}/${totalPages}**\n` +
-        `Tổng số: **${keys.length}** blacklist`
-      )
-      .setTimestamp();
+  // ----------------------------------------------------------
+  // ROW PROOF
+  // Discord tối đa 5 button / row
+  // ----------------------------------------------------------
+
+  let proofRow =
+    new ActionRowBuilder();
 
   for (const key of pageKeys) {
 
-    const entry =
-      data[key];
+    if (
+      proofRow.components.length >= 5
+    ) {
+      components.push(proofRow);
 
-    const target =
-      entry.userId
-        ? `<@${entry.userId}>`
-        : (entry.ten || 'Không xác định');
+      proofRow =
+        new ActionRowBuilder();
+    }
 
-    const reason =
-      entry.lydo ||
-      entry.resson ||
-      'Không có lý do';
-
-    const time =
-      entry.thoihan ||
-      'Vĩnh viễn';
-
-    const addedBy =
-      entry.nguoiThem
-        ? `<@${entry.nguoiThem}>`
-        : 'Không xác định';
-
-    // MỖI BLACKLIST XỔ DỌC
-    embed.addFields(
-      {
-        name: '━━━━━━━━━━━━━━━━━━━━',
-        value: '\u200B',
-        inline: false
-      },
-      {
-        name: ' Target',
-        value: String(target),
-        inline: false
-      },
-      {
-        name: ' Reason',
-        value: String(reason),
-        inline: false
-      },
-      {
-        name: ' Thời hạn',
-        value: String(time),
-        inline: false
-      },
-      {
-        name: ' Added by',
-        value: String(addedBy),
-        inline: false
-      }
+    proofRow.addComponents(
+      taoProofButton(key)
     );
   }
 
-  return embed;
+  if (proofRow.components.length > 0) {
+    components.push(proofRow);
+  }
+
+  // ----------------------------------------------------------
+  // ROW PAGINATION
+  // ----------------------------------------------------------
+
+  if (totalPages > 1) {
+
+    const navRow =
+      new ActionRowBuilder();
+
+    if (page > 0) {
+      navRow.addComponents(
+        new ButtonBuilder()
+          .setCustomId(
+            `blacklist_page_prev_${page}`
+          )
+          .setLabel('Trang trước')
+          .setEmoji('⬅️')
+          .setStyle(
+            ButtonStyle.Secondary
+          )
+      );
+    }
+
+    if (page < totalPages - 1) {
+      navRow.addComponents(
+        new ButtonBuilder()
+          .setCustomId(
+            `blacklist_page_next_${page}`
+          )
+          .setLabel('Trang sau')
+          .setEmoji('➡️')
+          .setStyle(
+            ButtonStyle.Secondary
+          )
+      );
+    }
+
+    components.push(navRow);
+  }
+
+  return components;
 }
 
 // ============================================================
-// TẠO BUTTON PAGINATION
+// MODULE
 // ============================================================
 
-function taoPaginationButtons(
-  page,
-  totalPages
+module.exports = function(
+  client,
+  adminIds
 ) {
 
-  if (totalPages <= 1) {
-    return null;
-  }
+  // ==========================================================
+  // ĐĂNG KÝ SLASH COMMAND
+  // ==========================================================
 
-  const row =
-    new ActionRowBuilder();
+  client.once(
+    'clientReady',
+    async () => {
 
-  // Trang trước
-  if (page > 0) {
+      try {
 
-    row.addComponents(
-      new ButtonBuilder()
-        .setCustomId(
-          `blacklist_page_prev_${page}`
-        )
-        .setLabel('◀ Trang trước')
-        .setStyle(
-          ButtonStyle.Primary
-        )
-    );
-  }
+        const command =
+          new SlashCommandBuilder()
+            .setName('blacklist')
+            .setDescription(
+              'Quản lý danh sách đen'
+            );
 
-  // Hiện trang
-  row.addComponents(
-    new ButtonBuilder()
-      .setCustomId(
-        `blacklist_page_current_${page}`
-      )
-      .setLabel(
-        `Trang ${page + 1}/${totalPages}`
-      )
-      .setStyle(
-        ButtonStyle.Secondary
-      )
-      .setDisabled(true)
+        // ====================================================
+        // ADD
+        // ====================================================
+
+        command.addSubcommand(
+          sub =>
+            sub
+              .setName('add')
+              .setDescription(
+                'Thêm người vào blacklist'
+              )
+
+              // REQUIRED PHẢI ĐỨNG TRƯỚC
+              .addStringOption(
+                opt =>
+                  opt
+                    .setName('lydo')
+                    .setDescription(
+                      'Lý do blacklist'
+                    )
+                    .setRequired(true)
+                    .setMaxLength(1000)
+              )
+
+              // PROOF BẮT BUỘC
+              .addAttachmentOption(
+                opt =>
+                  opt
+                    .setName('proof')
+                    .setDescription(
+                      'Ảnh proof - bắt buộc'
+                    )
+                    .setRequired(true)
+              )
+
+              // OPTIONAL ĐỨNG SAU
+              .addUserOption(
+                opt =>
+                  opt
+                    .setName('nguoi')
+                    .setDescription(
+                      'Người bị blacklist'
+                    )
+                    .setRequired(false)
+              )
+
+              .addStringOption(
+                opt =>
+                  opt
+                    .setName('ten')
+                    .setDescription(
+                      'Tên nếu không có User'
+                    )
+                    .setRequired(false)
+              )
+
+              .addStringOption(
+                opt =>
+                  opt
+                    .setName('thoihan')
+                    .setDescription(
+                      'Thời hạn - mặc định Vĩnh viễn'
+                    )
+                    .setRequired(false)
+              )
+        );
+
+        // ====================================================
+        // REMOVE
+        // ====================================================
+
+        command.addSubcommand(
+          sub =>
+            sub
+              .setName('remove')
+              .setDescription(
+                'Gỡ khỏi blacklist'
+              )
+
+              .addUserOption(
+                opt =>
+                  opt
+                    .setName('nguoi')
+                    .setDescription(
+                      'Người cần gỡ'
+                    )
+                    .setRequired(false)
+              )
+
+              .addStringOption(
+                opt =>
+                  opt
+                    .setName('ten')
+                    .setDescription(
+                      'Tên cần gỡ'
+                    )
+                    .setRequired(false)
+              )
+        );
+
+        // ====================================================
+        // CHECK
+        // ====================================================
+
+        command.addSubcommand(
+          sub =>
+            sub
+              .setName('check')
+              .setDescription(
+                'Kiểm tra blacklist'
+              )
+
+              .addUserOption(
+                opt =>
+                  opt
+                    .setName('nguoi')
+                    .setDescription(
+                      'Người cần kiểm tra'
+                    )
+                    .setRequired(false)
+              )
+
+              .addStringOption(
+                opt =>
+                  opt
+                    .setName('ten')
+                    .setDescription(
+                      'Tên cần kiểm tra'
+                    )
+                    .setRequired(false)
+              )
+        );
+
+        // ====================================================
+        // LIST
+        // ====================================================
+
+        command.addSubcommand(
+          sub =>
+            sub
+              .setName('list')
+              .setDescription(
+                'Xem danh sách blacklist'
+              )
+        );
+
+        // ====================================================
+        // REGISTER
+        // ====================================================
+
+        const rest =
+          new REST({
+            version: '10'
+          }).setToken(
+            process.env.TOKEN
+          );
+
+        await rest.put(
+          Routes.applicationCommands(
+            client.user.id
+          ),
+          {
+            body: [
+              command.toJSON()
+            ]
+          }
+        );
+
+        console.log(
+          ' Đã đăng ký slash command /blacklist'
+        );
+
+      } catch (err) {
+
+        console.error(
+          ' Lỗi đăng ký blacklist:',
+          err
+        );
+
+      }
+
+    }
   );
 
-  // Trang sau
-  if (page < totalPages - 1) {
+  // ==========================================================
+  // INTERACTION
+  // ==========================================================
 
-    row.addComponents(
-      new ButtonBuilder()
-        .setCustomId(
-          `blacklist_page_next_${page}`
-        )
-        .setLabel('Trang sau ▶')
-        .setStyle(
-          ButtonStyle.Primary
-        )
-    );
-  }
+  client.on(
+    'interactionCreate',
+    async interaction => {
 
-  return row;
-}
+      // ======================================================
+      // BUTTON PROOF
+      // ======================================================
+
+      if (
+        interaction.isButton() &&
+        interaction.customId.startsWith(
+          'blacklist_proof_'
+        )
+      ) {
+
+        const result =
+          layEntryTuButton(
+            interaction.customId
+          );
+
+        if (
+          !result ||
+          !result.entry
+        ) {
+
+          return interaction.reply({
+            content:
+              ' Không tìm thấy blacklist hoặc dữ liệu đã bị xóa.',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        const entry =
+          result.entry;
+
+        if (!entry.proof) {
+
+          return interaction.reply({
+            content:
+              ' Mục blacklist này không có proof.',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        const proofEmbed =
+          new EmbedBuilder()
+            .setTitle('BLACKLIST PROOF')
+            .setColor(0xFFFFFF)
+            .setImage(
+              entry.proof
+            )
+            .setTimestamp();
+
+        return interaction.reply({
+          embeds: [
+            proofEmbed
+          ],
+          ephemeral: true
+        }).catch(() => {});
+
+      }
+
+      // ======================================================
+      // BUTTON PAGINATION
+      // ======================================================
+
+      if (
+        interaction.isButton() &&
+        interaction.customId.startsWith(
+          'blacklist_page_'
+        )
+      ) {
+
+        const parts =
+          interaction.customId.split('_');
+
+        const action =
+          parts[2];
+
+        const oldPage =
+          parseInt(parts[3]);
+
+        if (
+          Number.isNaN(oldPage)
+        ) {
+          return interaction.reply({
+            content:
+              ' Trang không hợp lệ.',
+            ephemeral: true
+          }).catch(() => {});
+        }
+
+        const data =
+          readData();
+
+        const keys =
+          Object.keys(data);
+
+        const ITEMS_PER_PAGE = 5;
+
+        const totalPages =
+          Math.ceil(
+            keys.length /
+            ITEMS_PER_PAGE
+          );
+
+        let newPage =
+          oldPage;
+
+        if (action === 'prev') {
+          newPage =
+            oldPage - 1;
+        }
+
+        if (action === 'next') {
+          newPage =
+            oldPage + 1;
+        }
+
+        if (newPage < 0) {
+          newPage = 0;
+        }
+
+        if (
+          newPage >= totalPages
+        ) {
+          newPage =
+            totalPages - 1;
+        }
+
+        const embed =
+          taoEmbedList(
+            data,
+            keys,
+            newPage,
+            ITEMS_PER_PAGE,
+            totalPages
+          );
+
+        const components =
+          taoListComponents(
+            data,
+            keys,
+            newPage,
+            ITEMS_PER_PAGE,
+            totalPages
+          );
+
+        return interaction.update({
+          embeds: [
+            embed
+          ],
+          components
+        }).catch(() => {});
+
+      }
+
+      // ======================================================
+      // CHỈ CHAT INPUT TỪ ĐÂY
+      // ======================================================
+
+      if (
+        !interaction.isChatInputCommand()
+      ) {
+        return;
+      }
+
+      if (
+        interaction.commandName !==
+        'blacklist'
+      ) {
+        return;
+      }
+
+      // ======================================================
+      // CHECK ADMIN
+      // ======================================================
+
+      if (
+        !Array.isArray(adminIds) ||
+        !adminIds.includes(
+          interaction.user.id
+        )
+      ) {
+
+        return interaction.reply({
+          content:
+            ' Bạn không có quyền sử dụng lệnh này!',
+          ephemeral: true
+        }).catch(() => {});
+
+      }
+
+      const subCmd =
+        interaction.options.getSubcommand();
+
+      // ======================================================
+      // ADD
+      // ======================================================
+
+      if (subCmd === 'add') {
+
+        const nguoi =
+          interaction.options.getUser(
+            'nguoi'
+          );
+
+        const ten =
+          interaction.options.getString(
+            'ten'
+          );
+
+        const lydo =
+          interaction.options.getString(
+            'lydo'
+          );
+
+        const thoihan =
+          interaction.options.getString(
+            'thoihan'
+          ) ||
+          'Vĩnh viễn';
+
+        const proof =
+          interaction.options.getAttachment(
+            'proof'
+          );
+
+        // ----------------------------------------------------
+        // PHẢI CÓ NGƯỜI HOẶC TÊN
+        // ----------------------------------------------------
+
+        if (!nguoi && !ten) {
+
+          return interaction.reply({
+            content:
+              ' Bạn phải nhập **nguoi** hoặc **ten**!',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        // ----------------------------------------------------
+        // PROOF BẮT BUỘC
+        // ----------------------------------------------------
+
+        if (!proof) {
+
+          return interaction.reply({
+            content:
+              ' Proof là **bắt buộc**! Hãy upload ảnh trước khi gửi lệnh.',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        // ----------------------------------------------------
+        // KIỂM TRA FILE ẢNH
+        // ----------------------------------------------------
+
+        if (
+          !proof.contentType ||
+          !proof.contentType.startsWith(
+            'image/'
+          )
+        ) {
+
+          return interaction.reply({
+            content:
+              ' Proof phải là **ảnh** PNG, JPG, JPEG, GIF hoặc WEBP!',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        // ----------------------------------------------------
+        // KEY
+        // ----------------------------------------------------
+
+        const khoa =
+          layKhoa(
+            nguoi,
+            ten
+          );
+
+        if (!khoa) {
+
+          return interaction.reply({
+            content:
+              ' Không thể tạo khóa blacklist.',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        // ----------------------------------------------------
+        // READ
+        // ----------------------------------------------------
+
+        const data =
+          readData();
+
+        if (data[khoa]) {
+
+          return interaction.reply({
+            content:
+              ' Đối tượng này đã có trong blacklist!',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        // ----------------------------------------------------
+        // SAVE
+        // ----------------------------------------------------
+
+        data[khoa] = {
+          userId:
+            nguoi
+              ? nguoi.id
+              : null,
+
+          ten:
+            ten
+              ? ten.trim()
+              : (
+                  nguoi
+                    ? nguoi.username
+                    : ''
+                ),
+
+          lydo:
+            lydo.trim(),
+
+          thoihan:
+            thoihan.trim(),
+
+          proof:
+            proof.url,
+
+          nguoiThem:
+            interaction.user.id,
+
+          thoiGian:
+            Date.now()
+        };
+
+        if (!saveData(data)) {
+
+          return interaction.reply({
+            content:
+              ' Không thể lưu dữ liệu blacklist.',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        // ----------------------------------------------------
+        // EMBED
+        // ----------------------------------------------------
+
+        const embed =
+          taoEmbedAdd(
+            data[khoa]
+          );
+
+        // ----------------------------------------------------
+        // BUTTON PROOF
+        // ----------------------------------------------------
+
+        const row =
+          new ActionRowBuilder()
+            .addComponents(
+              taoProofButton(khoa)
+            );
+
+        // ----------------------------------------------------
+        // TRẢ CHO ADMIN
+        // ----------------------------------------------------
+
+        await interaction.reply({
+          content:
+            ' Đã thêm vào blacklist.',
+          embeds: [
+            embed
+          ],
+          components: [
+            row
+          ],
+          ephemeral: true
+        }).catch(() => {});
+
+        // ----------------------------------------------------
+        // GỬI LOG CHANNEL
+        // ----------------------------------------------------
+
+        if (
+          BLACKLIST_CHANNEL_ID
+        ) {
+
+          const channel =
+            interaction.guild.channels.cache.get(
+              BLACKLIST_CHANNEL_ID
+            );
+
+          if (channel) {
+
+            const publicEmbed =
+              new EmbedBuilder()
+                .setTitle(
+                  'ADDED TO BLACKLIST'
+                )
+                .setColor(
+                  0xFF0000
+                )
+                .addFields(
+                  {
+                    name:
+                      ' Target',
+                    value:
+                      nguoi
+                        ? `<@${nguoi.id}>`
+                        : String(
+                            ten
+                          ),
+                    inline:
+                      false
+                  },
+                  {
+                    name:
+                      ' Reason',
+                    value:
+                      lydo.slice(
+                        0,
+                        1024
+                      ),
+                    inline:
+                      false
+                  },
+                  {
+                    name:
+                      '⏱ Time',
+                    value:
+                      thoihan.slice(
+                        0,
+                        1024
+                      ),
+                    inline:
+                      false
+                  },
+                  {
+                    name:
+                      ' Added by',
+                    value:
+                      `<@${interaction.user.id}>`,
+                    inline:
+                      false
+                  }
+                )
+                .setTimestamp();
+
+            const publicRow =
+              new ActionRowBuilder()
+                .addComponents(
+                  taoProofButton(khoa)
+                );
+
+            await channel.send({
+              embeds: [
+                publicEmbed
+              ],
+              components: [
+                publicRow
+              ]
+            }).catch(err => {
+
+              console.error(
+                ' Lỗi gửi blacklist log:',
+                err
+              );
+
+            });
+
+          } else {
+
+            console.warn(
+              ' Không tìm thấy BLACKLIST_CHANNEL_ID:',
+              BLACKLIST_CHANNEL_ID
+            );
+
+          }
+
+        }
+
+        return;
+      }
+
+      // ======================================================
+      // REMOVE
+      // ======================================================
+
+      if (subCmd === 'remove') {
+
+        const nguoi =
+          interaction.options.getUser(
+            'nguoi'
+          );
+
+        const ten =
+          interaction.options.getString(
+            'ten'
+          );
+
+        if (!nguoi && !ten) {
+
+          return interaction.reply({
+            content:
+              ' Bạn phải nhập **nguoi** hoặc **ten**!',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        const khoa =
+          layKhoa(
+            nguoi,
+            ten
+          );
+
+        const data =
+          readData();
+
+        if (!data[khoa]) {
+
+          return interaction.reply({
+            content:
+              ' Không tìm thấy đối tượng trong blacklist.',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        const oldEntry =
+          data[khoa];
+
+        delete data[khoa];
+
+        if (!saveData(data)) {
+
+          return interaction.reply({
+            content:
+              ' Không thể lưu dữ liệu sau khi gỡ.',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        const target =
+          oldEntry.userId
+            ? `<@${oldEntry.userId}>`
+            : oldEntry.ten;
+
+        const embed =
+          new EmbedBuilder()
+            .setTitle(
+              ' ĐÃ GỠ KHỎI BLACKLIST'
+            )
+            .setColor(
+              0x00FF00
+            )
+            .addFields({
+              name:
+                ' Target',
+              value:
+                String(
+                  target
+                ),
+              inline:
+                false
+            })
+            .setTimestamp();
+
+        // Reply công khai vì đây là thông báo gỡ
+        await interaction.reply({
+          embeds: [
+            embed
+          ]
+        }).catch(() => {});
+
+        // Log
+        if (
+          BLACKLIST_CHANNEL_ID
+        ) {
+
+          const channel =
+            interaction.guild.channels.cache.get(
+              BLACKLIST_CHANNEL_ID
+            );
+
+          if (channel) {
+
+            await channel.send({
+              embeds: [
+                embed
+              ]
+            }).catch(() => {});
+
+          }
+
+        }
+
+        return;
+      }
+
+      // ======================================================
+      // CHECK
+      // ======================================================
+
+      if (subCmd === 'check') {
+
+        const nguoi =
+          interaction.options.getUser(
+            'nguoi'
+          );
+
+        const ten =
+          interaction.options.getString(
+            'ten'
+          );
+
+        if (!nguoi && !ten) {
+
+          return interaction.reply({
+            content:
+              ' Bạn phải nhập **nguoi** hoặc **ten**!',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        const khoa =
+          layKhoa(
+            nguoi,
+            ten
+          );
+
+        const data =
+          readData();
+
+        const entry =
+          data[khoa];
+
+        if (!entry) {
+
+          return interaction.reply({
+            content:
+              ' Đối tượng này **không có** trong blacklist.',
+            ephemeral: true
+          }).catch(() => {});
+
+        }
+
+        const embed =
+          taoEmbedCheck(
+            entry
+          );
+
+        const row =
+          new ActionRowBuilder()
+            .addComponents(
+              taoProofButton(khoa)
+            );
+
+        // Check để riêng tư
+        return interaction.reply({
+          embeds: [
+            embed
+          ],
+          components: [
+            row
+          ],
+          ephemeral: true
+        }).catch(() => {});
+
+      }
+
+      // ======================================================
+      // LIST
+      // ======================================================
+
+      if (subCmd === 'list') {
+
+        const data =
+          readData();
+
+        const keys =
+          Object.keys(data);
+
+        if (
+          keys.length === 0
+        ) {
+
+          // LIST KHÔNG EPHEMERAL
+          return interaction.reply({
+            content:
+              ' Danh sách blacklist đang trống.'
+          }).catch(() => {});
+
+        }
+
+        const ITEMS_PER_PAGE = 5;
+
+        const totalPages =
+          Math.ceil(
+            keys.length /
+            ITEMS_PER_PAGE
+          );
+
+        const page = 0;
+
+        const embed =
+          taoEmbedList(
+            data,
+            keys,
+            page,
+            ITEMS_PER_PAGE,
+            totalPages
+          );
+
+        const components =
+          taoListComponents(
+            data,
+            keys,
+            page,
+            ITEMS_PER_PAGE,
+            totalPages
+          );
+
+        // ====================================================
+        // QUAN TRỌNG:
+        // KHÔNG EPHEMERAL
+        // TẤT CẢ SERVER ĐỀU XEM ĐƯỢC
+        // ====================================================
+
+        const message =
+          await interaction.reply({
+            embeds: [
+              embed
+            ],
+            components,
+            fetchReply: true
+          }).catch(() => null);
+
+        if (!message) {
+          return;
+        }
+
+        // ====================================================
+        // COLLECTOR
+        // ====================================================
+
+        const filter =
+          i =>
+            (
+              i.customId.startsWith(
+                'blacklist_page_'
+              ) ||
+              i.customId.startsWith(
+                'blacklist_proof_'
+              )
+            );
+
+        const collector =
+          message.createMessageComponentCollector({
+            filter,
+            time: 10 * 60 * 1000
+          });
+
+        collector.on(
+          'collect',
+          async i => {
+
+            // ------------------------------------------------
+            // PROOF
+            // ------------------------------------------------
+
+            if (
+              i.customId.startsWith(
+                'blacklist_proof_'
+              )
+            ) {
+
+              const result =
+                layEntryTuButton(
+                  i.customId
+                );
+
+              if (
+                !result ||
+                !result.entry
+              ) {
+
+                return i.reply({
+                  content:
+                    ' Không tìm thấy dữ liệu blacklist.',
+                  ephemeral: true
+                }).catch(() => {});
+
+              }
+
+              if (
+                !result.entry.proof
+              ) {
+
+                return i.reply({
+                  content:
+                    ' Mục này không có proof.',
+                  ephemeral: true
+                }).catch(() => {});
+
+              }
+
+              const proofEmbed =
+                new EmbedBuilder()
+                  .setTitle(
+                    ' BLACKLIST PROOF'
+                  )
+                  .setColor(
+                    0xFFFFFF
+                  )
+                  .setImage(
+                    result.entry.proof
+                  )
+                  .setTimestamp();
+
+              // =================================================
+              // CHỈ NGƯỜI BẤM NÚT XEM ĐƯỢC
+              // =================================================
+
+              return i.reply({
+                embeds: [
+                  proofEmbed
+                ],
+                ephemeral: true
+              }).catch(() => {});
+
+            }
+
+            // ------------------------------------------------
+            // PAGINATION
+            // ------------------------------------------------
+
+            const parts =
+              i.customId.split('_');
+
+            const action =
+              parts[2];
+
+            const oldPage =
+              parseInt(
+                parts[3]
+              );
+
+            if (
+              Number.isNaN(oldPage)
+            ) {
+
+              return i.reply({
+                content:
+                  ' Trang không hợp lệ.',
+                ephemeral: true
+              }).catch(() => {});
+
+            }
+
+            const latestData =
+              readData();
+
+            const latestKeys =
+              Object.keys(
+                latestData
+              );
+
+            const latestTotalPages =
+              Math.ceil(
+                latestKeys.length /
+                ITEMS_PER_PAGE
+              );
+
+            let newPage =
+              oldPage;
+
+            if (
+              action === 'prev'
+            ) {
+              newPage =
+                oldPage - 1;
+            }
+
+            if (
+              action === 'next'
+            ) {
+              newPage =
+                oldPage + 1;
+            }
+
+            if (
+              newPage < 0
+            ) {
+              newPage = 0;
+            }
+
+            if (
+              newPage >=
+              latestTotalPages
+            ) {
+              newPage =
+                latestTotalPages - 1;
+            }
+
+            const newEmbed =
+              taoEmbedList(
+                latestData,
+                latestKeys,
+                newPage,
+                ITEMS_PER_PAGE,
+                latestTotalPages
+              );
+
+            const newComponents =
+              taoListComponents(
+                latestData,
+                latestKeys,
+                newPage,
+                ITEMS_PER_PAGE,
+                latestTotalPages
+              );
+
+            return i.update({
+              embeds: [
+                newEmbed
+              ],
+              components:
+                newComponents
+            }).catch(() => {});
+
+          }
+        );
+
+        collector.on(
+          'end',
+          async () => {
+
+            try {
+
+              const disabledComponents =
+                components.map(
+                  row => {
+
+                    const newRow =
+                      new ActionRowBuilder();
+
+                    for (
+                      const component
+                      of row.components
+                    ) {
+
+                      const button =
+                        ButtonBuilder.from(
+                          component
+                        );
+
+                      button.setDisabled(
+                        true
+                      );
+
+                      newRow.addComponents(
+                        button
+                      );
+                    }
+
+                    return newRow;
+                  }
+                );
+
+              await message.edit({
+                components:
+                  disabledComponents
+              });
+
+            } catch {
+              // Message có thể đã bị xóa
+            }
+
+          }
+        );
+
+        return;
+      }
+
+    }
+  );
+};
