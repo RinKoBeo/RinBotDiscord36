@@ -452,7 +452,9 @@ client.once("ready", async () => {
           .addStringOption(o => o.setName("lydo").setDescription("Ly do blacklist").setRequired(true))
           .addUserOption(o => o.setName("nguoi").setDescription("Nguoi bi blacklist (neu co Discord)").setRequired(false))
           .addStringOption(o => o.setName("ten").setDescription("Ten (neu khong co Discord)").setRequired(false))
-          .addAttachmentOption(o => o.setName("anh").setDescription("Anh bang chung (tuy chon)").setRequired(false))
+          .addStringOption(o => o.setName("thoihan").setDescription("Thoi han (mac dinh: Permanent)").setRequired(false))
+          .addStringOption(o => o.setName("thoigian").setDescription("Ngay/gio tuy ban ghi (tuy chon)").setRequired(false))
+          .addAttachmentOption(o => o.setName("proof").setDescription("Anh bang chung (tuy chon)").setRequired(false))
       )
       .addSubcommand(sub =>
         sub.setName("remove")
