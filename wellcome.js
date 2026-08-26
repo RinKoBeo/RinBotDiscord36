@@ -13,7 +13,7 @@ module.exports = (client) => {
     const WELCOME_IMAGE_URL = "https://raw.githubusercontent.com/RinKoBeo/RinBotDiscord36/main/volwelcome.png";
 
     // Anh goodbye van dung file that (chua co link moi)
-    const GOODBYE_IMAGE_PATH = "https://raw.githubusercontent.com/RinKoBeo/RinBotDiscord36/main/goodbyevol.png]"
+    const GOODBYE_IMAGE_PATH = "https://raw.githubusercontent.com/RinKoBeo/RinBotDiscord36/main/goodbyevol.png"
 
     // ===== WELCOME =====
     client.on("guildMemberAdd", async (member) => {
