@@ -10,7 +10,7 @@ module.exports = (client) => {
     const GOODBYE_CHANNEL_ID = '1525858147669901596';
 
     // Anh welcome - dung link truc tiep, khong can file dinh kem/ID gi nua
-    const WELCOME_IMAGE_URL = "https://files.catbox.moe/m54dy8.png";
+    const WELCOME_IMAGE_URL = "volwelcome.png";
 
     // Anh goodbye van dung file that (chua co link moi)
     const GOODBYE_IMAGE_PATH = path.join(__dirname, 'goodbye.jpg');
