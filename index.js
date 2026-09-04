@@ -499,7 +499,25 @@ client.once("ready", async () => {
       ),
     new SlashCommandBuilder()
       .setName("help")
-      .setDescription("Xem danh sach chuc nang va cach su dung bot")
+      .setDescription("Xem danh sach chuc nang va cach su dung bot"),
+    new SlashCommandBuilder()
+      .setName("rank")
+      .setDescription("Xem level va XP cua ban hoac nguoi khac")
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi can xem (bo trong = xem chinh minh)").setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName("leaderboard")
+      .setDescription("Xem bang xep hang top 10 XP cua server"),
+    new SlashCommandBuilder()
+      .setName("setxp")
+      .setDescription("Admin: Chinh sua XP cua 1 thanh vien")
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi can chinh XP").setRequired(true)
+      )
+      .addIntegerOption(option =>
+        option.setName("xp").setDescription("So XP muon dat (0 = reset)").setRequired(true).setMinValue(0)
+      ),
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -1041,6 +1059,7 @@ require("./unlock.js")(client);
 require("./lock.js")(client);
 require("./logger.js")(client);
 require("./warn.js")(client);
+require("./leveling.js")(client);
 require("./taophong.js")(client);
 require("./wellcome.js")(client);
 require("./autorole.js")(client);
