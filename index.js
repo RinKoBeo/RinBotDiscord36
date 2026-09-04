@@ -406,10 +406,16 @@ client.once("ready", async () => {
       ),
     new SlashCommandBuilder()
       .setName("unwarn")
-      .setDescription("Xoa het gay canh cao cua 1 thanh vien")
+      .setDescription("Xoa warn theo ma warn cu the cua 1 thanh vien")
       .addUserOption(option =>
-        option.setName("nguoi").setDescription("Nguoi duoc xoa toi").setRequired(true)
+        option.setName("nguoi").setDescription("Nguoi can xoa warn").setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName("maso").setDescription("Ma warn can xoa (VD: WRN-A3F2) — xem bang /checkwarn").setRequired(true)
       ),
+    new SlashCommandBuilder()
+      .setName("warnlist")
+      .setDescription("Xem danh sach tat ca thanh vien dang bi warn"),
     new SlashCommandBuilder()
       .setName("kick")
       .setDescription("Kick 1 thanh vien khoi server")
