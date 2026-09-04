@@ -24,7 +24,7 @@ const LEVEL_ROLES = {
 };
 
 // Cooldown giữa 2 tin nhắn được cộng XP (ms) — chống spam farm XP
-const XP_COOLDOWN_MS = 30_000; // 30 giây
+const XP_COOLDOWN_MS = 5_000; // 5 giây
 
 // XP mỗi tin nhắn hợp lệ
 const XP_PER_MESSAGE = 10;
