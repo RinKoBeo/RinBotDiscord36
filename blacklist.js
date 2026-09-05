@@ -1,5 +1,5 @@
 // blacklist.js - Blacklist management (Admin only)
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -83,8 +83,11 @@ module.exports = function(client, adminIds) {
     if (!interaction.isChatInputCommand()) return;
     if (interaction.commandName !== 'blacklist') return;
 
-    if (!adminIds.includes(interaction.user.id)) {
-      return interaction.reply({ content: "You don't have permission to use this command!", ephemeral: true });
+    // Bat buoc: vua phai co quyen Administrator, VUA phai nam trong danh sach adminIds
+    const coQuyenAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+    const namTrongDanhSach = adminIds.includes(interaction.user.id);
+    if (!coQuyenAdmin || !namTrongDanhSach) {
+      return interaction.reply({ content: "You don't have permission to use this command! (Requires Administrator permission AND being on the admin list)", ephemeral: true });
     }
 
     await interaction.deferReply({ ephemeral: true });
@@ -102,7 +105,10 @@ module.exports = function(client, adminIds) {
       const thoigian = interaction.options.getString('thoigian') || null;
       const proof = interaction.options.getAttachment('proof');
 
-      if (proof && !proof.contentType?.startsWith('image/')) {
+      if (!proof) {
+        return interaction.editReply({ content: 'You must attach a proof image!' });
+      }
+      if (!proof.contentType?.startsWith('image/')) {
         return interaction.editReply({ content: 'Proof must be an image file (png, jpg, gif, webp).' });
       }
 
@@ -132,21 +138,23 @@ module.exports = function(client, adminIds) {
         .setTitle('Added To Blacklist')
         .setColor(0xffffff)
         .addFields(
-          { name: 'Target', value: nguoi ? `<@${nguoi.id}>` : ten, inline: true },
-          { name: 'Reason', value: lydo, inline: true },
-          { name: 'Duration', value: thoihan, inline: true },
-          { name: 'Added by', value: `<@${interaction.user.id}>`, inline: true }
+          { name: 'Target', value: nguoi ? `<@${nguoi.id}>` : ten, inline: false },
+          { name: 'Reason', value: lydo, inline: false },
+          { name: 'Duration', value: thoihan, inline: false },
+          { name: 'Added by', value: `<@${interaction.user.id}>`, inline: false }
         );
 
-      if (thoigian) embed.addFields({ name: 'Date', value: thoigian, inline: true });
-      if (proof) embed.setImage(proof.url);
+      if (thoigian) embed.addFields({ name: 'Date', value: thoigian, inline: false });
+      // KHONG hien anh proof truc tiep trong embed cong khai nua - tranh anh
+      // lon lam troi tin nhan trong kenh. Anh chi hien qua nut "Proof" ben
+      // duoi, va chi nguoi bam nut moi thay (ephemeral).
       embed.setTimestamp();
 
       const customId = nguoi ? nguoi.id : (ten || 'unknown');
       const row = proof ? new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`blacklist_view_proof_${customId}`)
-          .setLabel('View Proof')
+          .setLabel('Proof')
           .setStyle(ButtonStyle.Primary)
       ) : null;
 
@@ -217,21 +225,22 @@ module.exports = function(client, adminIds) {
         .setTitle('Blacklist Lookup Result')
         .setColor(0xffffff)
         .addFields(
-          { name: 'Target', value: entry.userId ? `<@${entry.userId}>` : entry.ten, inline: true },
-          { name: 'Reason', value: entry.lydo, inline: true },
-          { name: 'Duration', value: entry.thoihan || 'Permanent', inline: true },
-          { name: 'Added by', value: `<@${entry.nguoiThem}>`, inline: true }
+          { name: 'Target', value: entry.userId ? `<@${entry.userId}>` : entry.ten, inline: false },
+          { name: 'Reason', value: entry.lydo, inline: false },
+          { name: 'Duration', value: entry.thoihan || 'Permanent', inline: false },
+          { name: 'Added by', value: `<@${entry.nguoiThem}>`, inline: false }
         );
 
-      if (entry.thoigian) embed.addFields({ name: 'Date', value: entry.thoigian, inline: true });
+      if (entry.thoigian) embed.addFields({ name: 'Date', value: entry.thoigian, inline: false });
       embed.setTimestamp();
 
+      // KHONG hien anh proof truc tiep - chi qua nut "Proof" (ephemeral, chi
+      // nguoi bam thay), tranh troi tin nhan trong kenh.
       if (entry.proof) {
-        embed.setImage(entry.proof);
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`blacklist_view_proof_${entry.userId || entry.ten}`)
-            .setLabel('View Proof')
+            .setLabel('Proof')
             .setStyle(ButtonStyle.Primary)
         );
         return interaction.editReply({ embeds: [embed], components: [row] });
