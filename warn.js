@@ -4,17 +4,23 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
 } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
 // ============================================================
-// CẤU HÌNH — SỬA 2 DÒNG NÀY CHO ĐÚNG SERVER CỦA MÀY
+// CẤU HÌNH — SỬA CHO ĐÚNG SERVER CỦA MÀY
 // ============================================================
 // ID kênh bot sẽ gửi nhắc nhở 30 ngày (để null để dùng LOG_CHANNEL_ID từ env)
 const WARN_NOTIFY_CHANNEL_ID = process.env.WARN_LOG_CHANNEL_ID || process.env.LOG_CHANNEL_ID || null;
-// ID Role admin/mod sẽ bị ping khi bot nhắc xoá warn sau 30 ngày
-const WARN_NOTIFY_ROLE_ID = process.env.WARN_NOTIFY_ROLE_ID || ['1525871335354405174','1533442002849628160','1525888140211130550'];
+
+// ID Role admin/mod sẽ bị ping khi bot nhắc xoá warn sau 30 ngày.
+// Set qua env WARN_NOTIFY_ROLE_ID dạng "id1,id2,id3" (nhiều role cach nhau
+// bang dau phay) neu muon doi; khong set thi dung 3 role mac dinh ben duoi.
+const WARN_NOTIFY_ROLE_IDS = process.env.WARN_NOTIFY_ROLE_ID
+  ? process.env.WARN_NOTIFY_ROLE_ID.split(',').map(s => s.trim()).filter(Boolean)
+  : ['1525871335354405174', '1533442002849628160', '1525888140211130550'];
 // ============================================================
 
 // File riêng biệt cho hệ thống warn — KHÔNG dùng chung với violators.json của index.js
@@ -56,6 +62,96 @@ function formatDate(ts) {
   });
 }
 
+// Ghep nhieu role ID thanh chuoi mention hop le: "<@&id1> <@&id2> ..."
+// (Truoc day lam thang bien mang vao template string se ra "<@&id1,id2,id3>"
+// khong phai cu phap mention that, Discord se KHONG ping duoc ai ca.)
+function buildRoleTag(roleIds) {
+  if (!roleIds || roleIds.length === 0) return '';
+  return roleIds.map(id => `<@&${id}>`).join(' ') + ' ';
+}
+
+// Xay 1 trang cua /warnlist: embed liet ke toi da 25 nguoi, kem 1 menu xo
+// xuong (chon 1 nguoi de xem ly do) va nut Trang truoc/Trang sau neu co
+// nhieu hon 1 trang. Dung select menu thay vi nut-tren-tung-nguoi vi 1
+// select menu gom duoc toi da 25 option nhung chi ton 1 hang, con du 4 hang
+// cho nut phan trang - neu dung nut rieng cho tung nguoi thi 25 nguoi da
+// chiem het ca 5 hang, khong con cho de dat nut chuyen trang nua.
+function buildWarnlistPage(guild, warnedUsers, page) {
+  const PAGE_SIZE = 25;
+  const totalPages = Math.max(1, Math.ceil(warnedUsers.length / PAGE_SIZE));
+  const safePage = Math.min(Math.max(page, 0), totalPages - 1);
+  const pageUsers = warnedUsers.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  const lines = pageUsers
+    .map(([userId, userData]) => ` <@${userId}> — **${userData.warns.length}** gậy`)
+    .join('\n');
+
+  const embed = new EmbedBuilder()
+    .setTitle(' DANH SÁCH TỘI PHẠM CLAN ⚠️')
+    .setDescription(
+      `Có **${warnedUsers.length}** thành viên đang bị warn:\n\n` +
+      `${lines || '_Không có ai ở trang này._'}\n\n` +
+      `_Chọn 1 người ở menu bên dưới để xem chi tiết lý do warn._`
+    )
+    .setColor(0xff6600)
+    .setFooter({ text: `Trang ${safePage + 1}/${totalPages} · Chọn người ở menu để xem lý do` })
+    .setTimestamp();
+
+  const rows = [];
+
+  if (pageUsers.length > 0) {
+    const options = pageUsers.map(([userId, userData]) => {
+      let label;
+      const member = guild?.members.cache.get(userId);
+      label = member ? (member.displayName || member.user.username) : `User ${userId.slice(-4)}`;
+      if (label.length > 90) label = label.slice(0, 87) + '...';
+      return {
+        label,
+        description: `${userData.warns.length} gậy`.slice(0, 100),
+        value: userId,
+      };
+    });
+
+    const selectRow = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('warnlist_select')
+        .setPlaceholder('Chọn 1 người để xem lý do warn...')
+        .addOptions(options)
+    );
+    rows.push(selectRow);
+  }
+
+  if (totalPages > 1) {
+    const navRow = new ActionRowBuilder();
+    if (safePage > 0) {
+      navRow.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`warnlist_page_${safePage - 1}`)
+          .setLabel('◀ Trang trước')
+          .setStyle(ButtonStyle.Primary)
+      );
+    }
+    if (safePage < totalPages - 1) {
+      navRow.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`warnlist_page_${safePage + 1}`)
+          .setLabel('Trang sau ▶')
+          .setStyle(ButtonStyle.Primary)
+      );
+    }
+    rows.push(navRow);
+  }
+
+  return { embeds: [embed], components: rows };
+}
+
+function getWarnedUsers() {
+  const warns = readWarns();
+  return Object.entries(warns).filter(
+    ([, userData]) => userData.warns && userData.warns.length > 0
+  );
+}
+
 // ---- module export ----
 
 module.exports = (client) => {
@@ -64,7 +160,6 @@ module.exports = (client) => {
   // TIMER 30 NGÀY — Chạy mỗi 1 giờ, kiểm tra warn quá hạn
   // ============================================================
   const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-  const notifiedWarns = new Set(); // tránh spam nhắc lại cùng 1 warn
 
   async function checkExpiredWarns() {
     const channel = WARN_NOTIFY_CHANNEL_ID
@@ -74,13 +169,21 @@ module.exports = (client) => {
 
     const warns = readWarns();
     const now = Date.now();
+    let changed = false;
 
     for (const [userId, userData] of Object.entries(warns)) {
       if (!userData.warns) continue;
       for (const warn of userData.warns) {
-        if (notifiedWarns.has(warn.id)) continue;
+        // Danh dau "reminded" NGAY TREN CHINH warn do, luu vao warns.json,
+        // thay vi mot Set trong RAM. Bien trong RAM se mat sach moi lan bot
+        // restart/deploy lai (vd tren Render), khien nhung warn da qua 30
+        // ngay bi nhac lai tu dau moi lan deploy du da nhac roi. Luu thang
+        // vao file thi du restart bao nhieu lan cung khong bi nhac trung.
+        if (warn.reminded) continue;
         if (now - warn.timestamp >= THIRTY_DAYS_MS) {
-          notifiedWarns.add(warn.id);
+          warn.reminded = true;
+          changed = true;
+
           const embed = new EmbedBuilder()
             .setTitle(' NHẮC NHỞ — WARN QUÁ 30 NGÀY')
             .setColor(0xff6600)
@@ -95,13 +198,13 @@ module.exports = (client) => {
             .setFooter({ text: 'Hệ thống nhắc nhở tự động của Rin' })
             .setTimestamp();
 
-          const roleTag = WARN_NOTIFY_ROLE_ID && WARN_NOTIFY_ROLE_ID !== 'ROLE_ID_CUA_MAY_O_DAY'
-            ? `<@&${WARN_NOTIFY_ROLE_ID}> `
-            : '';
+          const roleTag = buildRoleTag(WARN_NOTIFY_ROLE_IDS);
           channel.send({ content: roleTag, embeds: [embed] }).catch(() => {});
         }
       }
     }
+
+    if (changed) saveWarns(warns);
   }
 
   // Chạy sau 30 giây khi bot online (để client sẵn sàng), sau đó mỗi 1 giờ
@@ -117,10 +220,11 @@ module.exports = (client) => {
   // ============================================================
   client.on('interactionCreate', async (interaction) => {
 
-    // ---- Xử lý nút bấm "Xem lý do" trong /warnlist ----
-    if (interaction.isButton()) {
-      if (!interaction.customId.startsWith('warnreasons_')) return;
-      const targetUserId = interaction.customId.replace('warnreasons_', '');
+    // ---- Chọn 1 người trong menu /warnlist để xem lý do ----
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId !== 'warnlist_select') return;
+
+      const targetUserId = interaction.values[0];
       const warns = readWarns();
       const userData = warns[targetUserId];
 
@@ -140,6 +244,17 @@ module.exports = (client) => {
         .setTimestamp();
 
       return interaction.reply({ embeds: [embed], ephemeral: true }).catch(() => {});
+    }
+
+    // ---- Nút chuyển trang /warnlist ----
+    if (interaction.isButton()) {
+      if (!interaction.customId.startsWith('warnlist_page_')) return;
+
+      const page = parseInt(interaction.customId.replace('warnlist_page_', ''), 10);
+      const warnedUsers = getWarnedUsers();
+      const pageData = buildWarnlistPage(interaction.guild, warnedUsers, Number.isNaN(page) ? 0 : page);
+
+      return interaction.update(pageData).catch(() => {});
     }
 
     if (!interaction.isChatInputCommand()) return;
@@ -170,6 +285,7 @@ module.exports = (client) => {
         reason: lyDo,
         by: interaction.user.id,
         timestamp: Date.now(),
+        reminded: false,
       });
 
       saveWarns(warns);
@@ -241,7 +357,18 @@ module.exports = (client) => {
       }
 
       const targetUser = interaction.options.getUser('nguoi');
-      const warnIdInput = interaction.options.getString('maso').toUpperCase().trim();
+
+      // Neu option "maso" chua ton tai (index.js chua dang ky, hoac cache
+      // lenh cu tren Discord) thi getString tra ve null - phai chan o day
+      // truoc khi goi .toUpperCase(), khong thi crash ngay lap tuc.
+      const warnIdRaw = interaction.options.getString('maso');
+      if (!warnIdRaw) {
+        return interaction.reply({
+          content: ' Bạn phải nhập mã số warn (option `maso`)! Dùng `/checkwarn` để xem mã số của người đó.',
+          ephemeral: true,
+        }).catch(() => {});
+      }
+      const warnIdInput = warnIdRaw.trim().toUpperCase();
 
       let warns = readWarns();
       const userData = warns[targetUser.id];
@@ -259,7 +386,6 @@ module.exports = (client) => {
       }
 
       const removed = userData.warns.splice(idx, 1)[0];
-      notifiedWarns.delete(removed.id); // reset để tránh nhắc lại nếu được warn lại
       saveWarns(warns);
 
       const embedUnwarn = new EmbedBuilder()
@@ -278,14 +404,10 @@ module.exports = (client) => {
     }
 
     // ========================================================
-    // LỆNH 4: /WARNLIST
+    // LỆNH 4: /WARNLIST (phân trang, 25 người/trang)
     // ========================================================
     if (interaction.commandName === 'warnlist') {
-      const warns = readWarns();
-
-      const warnedUsers = Object.entries(warns).filter(
-        ([, userData]) => userData.warns && userData.warns.length > 0
-      );
+      const warnedUsers = getWarnedUsers();
 
       if (warnedUsers.length === 0) {
         const embedEmpty = new EmbedBuilder()
@@ -296,53 +418,8 @@ module.exports = (client) => {
         return interaction.reply({ embeds: [embedEmpty] }).catch(() => {});
       }
 
-      const lines = warnedUsers.map(([userId, userData]) =>
-        ` <@${userId}> — **${userData.warns.length}** gậy`
-      ).join('\n');
-
-      const embedList = new EmbedBuilder()
-        .setTitle(' DANH SÁCH TỘI PHẠM CLAN ⚠️')
-        .setDescription(
-          `Có **${warnedUsers.length}** thành viên đang bị warn:\n\n${lines}\n\n` +
-          `_Bấm nút bên dưới để xem chi tiết lý do warn của từng người._`
-        )
-        .setColor(0xff6600)
-        .setFooter({ text: 'Lý do warn được ẩn để tiết kiệm không gian — bấm nút để xem' })
-        .setTimestamp();
-
-      // Tạo nút "Xem lý do" cho từng user (tối đa 25 nút = 5 hàng x 5 nút)
-      const rows = [];
-      let currentRow = new ActionRowBuilder();
-      let btnCount = 0;
-
-      for (const [userId, userData] of warnedUsers) {
-        if (btnCount > 0 && btnCount % 5 === 0) {
-          rows.push(currentRow);
-          currentRow = new ActionRowBuilder();
-          if (rows.length >= 5) break;
-        }
-
-        let label;
-        try {
-          const member = interaction.guild?.members.cache.get(userId);
-          label = member ? (member.displayName || member.user.username) : `User ${userId.slice(-4)}`;
-        } catch {
-          label = `User ${userId.slice(-4)}`;
-        }
-        if (label.length > 20) label = label.slice(0, 17) + '...';
-
-        currentRow.addComponents(
-          new ButtonBuilder()
-            .setCustomId(`warnreasons_${userId}`)
-            .setLabel(` ${label} (${userData.warns.length})`)
-            .setStyle(ButtonStyle.Secondary)
-        );
-        btnCount++;
-      }
-
-      if (currentRow.components.length > 0) rows.push(currentRow);
-
-      return interaction.reply({ embeds: [embedList], components: rows }).catch(() => {});
+      const pageData = buildWarnlistPage(interaction.guild, warnedUsers, 0);
+      return interaction.reply(pageData).catch(() => {});
     }
   });
 };

@@ -406,16 +406,16 @@ client.once("ready", async () => {
       ),
     new SlashCommandBuilder()
       .setName("unwarn")
-      .setDescription("Xoa warn theo ma warn cu the cua 1 thanh vien")
+      .setDescription("Xoa 1 warn cu the theo ma so")
       .addUserOption(option =>
-        option.setName("nguoi").setDescription("Nguoi can xoa warn").setRequired(true)
+        option.setName("nguoi").setDescription("Nguoi duoc xoa toi").setRequired(true)
       )
       .addStringOption(option =>
-        option.setName("maso").setDescription("Ma warn can xoa (VD: WRN-A3F2) — xem bang /checkwarn").setRequired(true)
+        option.setName("maso").setDescription("Ma so cua warn can xoa (xem bang /checkwarn)").setRequired(true)
       ),
     new SlashCommandBuilder()
       .setName("warnlist")
-      .setDescription("Xem danh sach tat ca thanh vien dang bi warn"),
+      .setDescription("Xem danh sach thanh vien dang bi warn (phan trang)"),
     new SlashCommandBuilder()
       .setName("kick")
       .setDescription("Kick 1 thanh vien khoi server")
@@ -460,7 +460,7 @@ client.once("ready", async () => {
           .addStringOption(o => o.setName("ten").setDescription("Ten (neu khong co Discord)").setRequired(false))
           .addStringOption(o => o.setName("thoihan").setDescription("Thoi han (mac dinh: Permanent)").setRequired(false))
           .addStringOption(o => o.setName("thoigian").setDescription("Ngay/gio tuy ban ghi (tuy chon)").setRequired(false))
-          .addAttachmentOption(o => o.setName("proof").setDescription("Anh bang chung (tuy chon)").setRequired(false))
+          .addAttachmentOption(o => o.setName("proof").setDescription("Anh bang chung (bat buoc)").setRequired(true))
       )
       .addSubcommand(sub =>
         sub.setName("remove")
@@ -499,25 +499,7 @@ client.once("ready", async () => {
       ),
     new SlashCommandBuilder()
       .setName("help")
-      .setDescription("Xem danh sach chuc nang va cach su dung bot"),
-    new SlashCommandBuilder()
-      .setName("rank")
-      .setDescription("Xem level va XP cua ban hoac nguoi khac")
-      .addUserOption(option =>
-        option.setName("nguoi").setDescription("Nguoi can xem (bo trong = xem chinh minh)").setRequired(false)
-      ),
-    new SlashCommandBuilder()
-      .setName("leaderboard")
-      .setDescription("Xem bang xep hang top 10 XP cua server"),
-    new SlashCommandBuilder()
-      .setName("setxp")
-      .setDescription("Admin: Chinh sua XP cua 1 thanh vien")
-      .addUserOption(option =>
-        option.setName("nguoi").setDescription("Nguoi can chinh XP").setRequired(true)
-      )
-      .addIntegerOption(option =>
-        option.setName("xp").setDescription("So XP muon dat (0 = reset)").setRequired(true).setMinValue(0)
-      ),
+      .setDescription("Xem danh sach chuc nang va cach su dung bot")
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -617,6 +599,30 @@ const bannedWords = [
 ];
 
 console.log(`Da load ${bannedWords.length} tu cam (bao gom bien the leetspeak)`);
+
+// Bo URL ra khoi noi dung truoc khi quet tu cam. Tranh truong hop link GIF
+// (vd: klipy.com/gifs/....-edit-3) bi dinh oan vi "dit" nam trong "edit".
+function stripUrls(text) {
+  return text.replace(/https?:\/\/\S+/gi, ' ');
+}
+
+// Escape ky tu dac biet de dung an toan trong RegExp
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Kiem tra tu cam theo RANH GIOI TU (khong con la chuoi con nua).
+// Dung \p{L}\p{N} (Unicode letter/number, ho tro ca tieng Viet co dau) de
+// xac dinh "ben canh" tu la mot ky tu chu/so hay khong.
+// Vi du: "dit" se KHONG con trung trong "reddit", "credit", "edit"...
+// nhung van trung neu ai go dung tu "dit" rieng le, co dau cach/dau cau bao quanh.
+function containsBannedWord(rawText) {
+  const cleaned = stripUrls(rawText);
+  return bannedWords.some(word => {
+    const pattern = new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegex(word)}([^\\p{L}\\p{N}]|$)`, 'iu');
+    return pattern.test(cleaned);
+  });
+}
 
 // ============================================================
 // SỰ KIỆN TIN NHẮN (chi con lai: ping-joke, chong spam, quet tu cam)
@@ -1059,7 +1065,6 @@ require("./unlock.js")(client);
 require("./lock.js")(client);
 require("./logger.js")(client);
 require("./warn.js")(client);
-require("./leveling.js")(client);
 require("./taophong.js")(client);
 require("./wellcome.js")(client);
 require("./autorole.js")(client);
@@ -1069,5 +1074,6 @@ require("./ticket.js")(client, TOP_ADMIN_IDS);
 require("./blacklist.js")(client, TOP_ADMIN_IDS);
 require("./alliance.js")(client, TOP_ADMIN_IDS);
 require("./verify.js")(client, VERIFIED_ROLE_ID);
+require("./leveling.js")(client);
 // ===== LOGIN =====
 client.login(TOKEN);
