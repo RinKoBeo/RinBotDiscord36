@@ -136,7 +136,7 @@ module.exports = function(client, adminIds) {
 
       const embed = new EmbedBuilder()
         .setTitle('Added To Blacklist')
-        .setColor(0xffffff)
+        .setColor(0xE74C3C)
         .addFields(
           { name: 'Target', value: nguoi ? `<@${nguoi.id}>` : ten, inline: false },
           { name: 'Reason', value: lydo, inline: false },
