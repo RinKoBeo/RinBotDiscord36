@@ -1106,7 +1106,7 @@ require("./ticket.js")(client, TOP_ADMIN_IDS);
 require("./blacklist.js")(client, TOP_ADMIN_IDS);
 require("./alliance.js")(client, TOP_ADMIN_IDS);
 require("./verify.js")(client, VERIFIED_ROLE_ID);
-require("./level.js")(client);
+require("./leveling.js")(client);
 require("./rules.js")(client, TOP_ADMIN_IDS);
 // ===== LOGIN =====
 client.login(TOKEN);
