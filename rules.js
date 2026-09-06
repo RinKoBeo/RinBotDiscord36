@@ -69,7 +69,7 @@ function buildRulesEmbed() {
     .setDescription('**Luật Discord** giúp tạo ra môi trường cộng đồng an toàn, tôn trọng và có trật tự. Cần thực hiện theo.')
     .setTimestamp();
 
-  if (RULES_BANNER_URL && RULES_BANNER_URL !== 'DAN_LINK_GITHUB_RAW_ANH_BANNER_O_DAY') {
+  if (RULES_BANNER_URL && /^https?:\/\//i.test(RULES_BANNER_URL)) {
     embed.setImage(RULES_BANNER_URL);
   }
 
@@ -116,13 +116,19 @@ module.exports = function (client, adminIds) {
       return interaction.reply({ content: 'Bạn không có quyền sử dụng lệnh này!', ephemeral: true }).catch(() => {});
     }
 
-    if (!RULES_CHANNEL_ID || RULES_CHANNEL_ID === '1526993782967631883') {
-      return interaction.reply({ content: 'Chưa cấu hình RULES_CHANNEL_ID trong rules.js!', ephemeral: true }).catch(() => {});
+    // Kiem tra ID kenh co dung DANG (chi gom so, du dai cua 1 Discord
+    // snowflake ID) thay vi so sanh voi 1 chuoi placeholder cu the - vi
+    // neu ai do thay ID that vao ma lo thay luon ca cho so sanh (dung
+    // 1 lenh find-replace toan bo file) thi kieu so sanh cu se luon
+    // luon dung y het gia tri that, khien lenh tuong nhu "chua cau hinh"
+    // mai mai du da dien dung ID that roi.
+    if (!RULES_CHANNEL_ID || !/^\d{5,25}$/.test(RULES_CHANNEL_ID)) {
+      return interaction.reply({ content: 'RULES_CHANNEL_ID trong rules.js không hợp lệ (phải là ID kênh dạng số)!', ephemeral: true }).catch(() => {});
     }
 
     const channel = interaction.guild.channels.cache.get(RULES_CHANNEL_ID);
     if (!channel) {
-      return interaction.reply({ content: 'Không tìm thấy kênh Rules. Kiểm tra lại RULES_CHANNEL_ID!', ephemeral: true }).catch(() => {});
+      return interaction.reply({ content: 'Không tìm thấy kênh Rules trong server này. Kiểm tra lại RULES_CHANNEL_ID!', ephemeral: true }).catch(() => {});
     }
 
     await interaction.deferReply({ ephemeral: true }).catch(() => {});
