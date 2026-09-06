@@ -486,7 +486,9 @@ client.once("ready", async () => {
           .setDescription("Them 1 alliance moi")
           .addStringOption(o => o.setName("tenclan").setDescription("Ten clan lien minh").setRequired(true))
           .addUserOption(o => o.setName("nguoilienhe").setDescription("Nguoi lien he cua clan do").setRequired(true))
-          .addStringOption(o => o.setName("ghichu").setDescription("Ghi chu them (tuy chon)").setRequired(false))
+          .addUserOption(o => o.setName("leader").setDescription("Leader clan lien minh (phai co trong server)").setRequired(true))
+          .addStringOption(o => o.setName("noidung").setDescription("Noi dung thong bao").setRequired(true))
+          .addAttachmentOption(o => o.setName("anh").setDescription("Anh Alliance (bat buoc)").setRequired(true))
       )
       .addSubcommand(sub =>
         sub.setName("remove")
@@ -498,8 +500,38 @@ client.once("ready", async () => {
           .setDescription("Xem toan bo danh sach alliance")
       ),
     new SlashCommandBuilder()
+      .setName("rules")
+      .setDescription("Dang/cap nhat bang luat vao kenh Rules (Admin)"),
+    new SlashCommandBuilder()
       .setName("help")
-      .setDescription("Xem danh sach chuc nang va cach su dung bot")
+      .setDescription("Xem danh sach chuc nang va cach su dung bot"),
+    new SlashCommandBuilder()
+      .setName("rank")
+      .setDescription("Xem thong ke Level/XP cua 1 thanh vien")
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi can xem (bo trong = xem chinh minh)").setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName("leaderboard")
+      .setDescription("Xem bang xep hang Top 10 XP toan server"),
+    new SlashCommandBuilder()
+      .setName("setxp")
+      .setDescription("Set XP cho 1 thanh vien (Admin)")
+      .addUserOption(option =>
+        option.setName("nguoi").setDescription("Nguoi can set XP").setRequired(true)
+      )
+      .addIntegerOption(option =>
+        option.setName("xp").setDescription("So XP muon set").setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName("massrole")
+      .setDescription("Them role hang loat cho toan bo member (chi Owner server)")
+      .addRoleOption(option =>
+        option.setName("role1").setDescription("Role thu nhat can them").setRequired(true)
+      )
+      .addRoleOption(option =>
+        option.setName("role2").setDescription("Role thu hai can them (tuy chon)").setRequired(false)
+      )
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -1074,6 +1106,7 @@ require("./ticket.js")(client, TOP_ADMIN_IDS);
 require("./blacklist.js")(client, TOP_ADMIN_IDS);
 require("./alliance.js")(client, TOP_ADMIN_IDS);
 require("./verify.js")(client, VERIFIED_ROLE_ID);
-require("./leveling.js")(client);
+require("./level.js")(client);
+require("./rules.js")(client, TOP_ADMIN_IDS);
 // ===== LOGIN =====
 client.login(TOKEN);

@@ -11,12 +11,7 @@
 // - /alliance remove: gỡ alliance
 // - /alliance list: xem danh sách alliance
 
-const {
-  EmbedBuilder,
-  SlashCommandBuilder,
-  REST,
-  Routes
-} = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 
 const fs = require('fs');
 const path = require('path');
@@ -93,6 +88,13 @@ function taoAllianceEmbed(entry) {
         inline: false
       },
       {
+        name: ' Leader',
+        value: entry.leader
+          ? `<@${entry.leader}>`
+          : 'Không có',
+        inline: false
+      },
+      {
         name: ' Người liên hệ',
         value: entry.nguoiLienHe
           ? `<@${entry.nguoiLienHe}>`
@@ -127,109 +129,13 @@ function taoAllianceEmbed(entry) {
 
 module.exports = function(client, adminIds) {
 
-  // ==========================================================
-  // ĐĂNG KÝ SLASH COMMAND
-  // ==========================================================
-
-  client.once('ready', async () => {
-    try {
-
-      const command = new SlashCommandBuilder()
-        .setName('alliance')
-        .setDescription('Quản lý danh sách Alliance');
-
-      // ======================================================
-      // ADD
-      // ======================================================
-
-      command.addSubcommand(sub =>
-        sub
-          .setName('add')
-          .setDescription('Thêm một Alliance mới')
-
-          .addStringOption(opt =>
-            opt
-              .setName('tenclan')
-              .setDescription('Tên clan Alliance')
-              .setRequired(true)
-          )
-
-          .addUserOption(opt =>
-            opt
-              .setName('nguoilienhe')
-              .setDescription('Người liên hệ của Alliance')
-              .setRequired(true)
-          )
-
-          .addStringOption(opt =>
-            opt
-              .setName('noidung')
-              .setDescription('Nội dung thông báo, ví dụ: T và VOL')
-              .setRequired(true)
-              .setMaxLength(1000)
-          )
-
-          .addAttachmentOption(opt =>
-            opt
-              .setName('anh')
-              .setDescription('Ảnh Alliance bắt buộc')
-              .setRequired(true)
-          )
-      );
-
-      // ======================================================
-      // REMOVE
-      // ======================================================
-
-      command.addSubcommand(sub =>
-        sub
-          .setName('remove')
-          .setDescription('Gỡ một Alliance')
-
-          .addStringOption(opt =>
-            opt
-              .setName('tenclan')
-              .setDescription('Tên clan cần gỡ')
-              .setRequired(true)
-          )
-      );
-
-      // ======================================================
-      // LIST
-      // ======================================================
-
-      command.addSubcommand(sub =>
-        sub
-          .setName('list')
-          .setDescription('Xem danh sách Alliance')
-      );
-
-      // ======================================================
-      // ĐĂNG KÝ COMMAND
-      // ======================================================
-
-      const rest = new REST({
-        version: '10'
-      }).setToken(process.env.TOKEN);
-
-      await rest.put(
-        Routes.applicationCommands(client.user.id),
-        {
-          body: [command.toJSON()]
-        }
-      );
-
-      console.log(
-        ' Đã đăng ký slash command /alliance'
-      );
-
-    } catch (err) {
-      console.error(
-        ' Lỗi đăng ký /alliance:',
-        err
-      );
-    }
-  });
+  // LUU Y: Lenh /alliance da duoc dang ky tap trung trong index.js (guild
+  // command cho moi server bot dang o, giong blacklist.js). File nay
+  // KHONG tu dang ky lenh rieng nua - truoc day co doan tu goi
+  // rest.put(Routes.applicationCommands(...)) o day, dang ky GLOBAL voi
+  // option KHAC voi ban trong index.js (thieu noidung/anh), gay ra 2 phien
+  // ban /alliance khac nhau tren Discord, chon nham ban thieu option se
+  // luon bao loi "bat buoc phai tai anh" du co dinh tai hay khong.
 
   // ==========================================================
   // INTERACTION
@@ -270,6 +176,9 @@ module.exports = function(client, adminIds) {
 
       const nguoiLienHe =
         interaction.options.getUser('nguoilienhe');
+
+      const leader =
+        interaction.options.getUser('leader');
 
       const noiDung =
         interaction.options.getString('noidung');
@@ -347,6 +256,7 @@ module.exports = function(client, adminIds) {
       data[khoa] = {
         tenClan: tenClan.trim(),
         nguoiLienHe: nguoiLienHe.id,
+        leader: leader.id,
         noiDung: noiDung.trim(),
         anh: anh.url,
         nguoiThem: interaction.user.id,
@@ -510,6 +420,14 @@ module.exports = function(client, adminIds) {
             value: String(
               e.tenClan || 'Không có'
             ),
+            inline: false
+          },
+
+          {
+            name: ' Leader',
+            value: e.leader
+              ? `<@${e.leader}>`
+              : 'Không có',
             inline: false
           },
 
