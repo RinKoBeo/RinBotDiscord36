@@ -1,5 +1,5 @@
 // rules.js - Đăng / cập nhật bảng LUẬT (Rules) vào 1 kênh cố định
-// Chỉ Admin mới được chạy lệnh /rules
+// Tự động đăng khi bot online. Lệnh /rules (chỉ Admin) dùng để làm mới thủ công.
 
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
 
@@ -14,7 +14,7 @@ const RULES_BANNER_URL = process.env.RULES_BANNER_URL || 'https://raw.githubuser
 const RULES_TITLE = 'VanGurd of Liberty - Luật Discord (Rules)';
 // ============================================================
 
-// Nội dung 10 rule — sửa/thêm/bớt thoải mái, mỗi phần tử là 1 RULE
+// Nội dung rule — sửa/thêm/bớt thoải mái, mỗi phần tử là 1 RULE
 const RULES = [
   {
     title: 'Nội dung 18+ (Gore | NSFW | Disturbing)',
@@ -55,6 +55,17 @@ const RULES = [
   {
     title: 'Né tránh hình phạt',
     desc: 'Không sử dụng tài khoản phụ để né tránh mute/ban/kick. Mọi quyết định xử lý của BQT cần được tôn trọng; nếu không đồng ý, vui lòng khiếu nại qua kênh Ticket, không tự ý chống đối.',
+  },
+  {
+    title: 'Quấy rối tình dục | Quấy rối cá nhân',
+    desc: 'Cấm mọi hành vi quấy rối tình dục, quấy rối cá nhân, đe dọa hoặc bắt nạt người khác. Bao gồm tin nhắn, hình ảnh, giọng nói trong voice hoặc bất kỳ hình thức nào khác.',
+  },
+  {
+    title: 'Ngôn từ thô tục | Chửi bậy',
+    desc: 'Hạn chế sử dụng ngôn từ thô tục, chửi bậy, xúc phạm người khác. Nếu muốn chửi bậy hãy luôn nhớ nhưng câu từ bạn thốt ra nó không rút lại được và hình phạt cũng vậy.'
+  },
+  {title: 'Không được làm phiền Moderator',
+    desc: 'Không được làm phiền Moderator, Admin hay Ban Quản Trị khi họ đang bận. Nếu có vấn đề cần giải quyết hãy tạo Ticket hoặc gửi tin nhắn riêng cho họ, không spam ping hay tag.', 
   },
 ];
 
@@ -103,9 +114,49 @@ async function findOldRulesMessage(channel, client) {
   }
 }
 
+// Gui hoac cap nhat bang luat vao kenh. Dung chung cho ca luc bot vua
+// online (tu dong) lan khi admin go /rules (lam moi thu cong).
+async function postOrUpdateRules(client) {
+  if (!RULES_CHANNEL_ID || !/^\d{5,25}$/.test(RULES_CHANNEL_ID)) {
+    return { ok: false, reason: 'invalid_id' };
+  }
+
+  const channel = client.channels.cache.get(RULES_CHANNEL_ID);
+  if (!channel) {
+    return { ok: false, reason: 'channel_not_found' };
+  }
+
+  const embed = buildRulesEmbed();
+
+  try {
+    const oldMsg = await findOldRulesMessage(channel, client);
+    if (oldMsg) {
+      await oldMsg.edit({ embeds: [embed] });
+      return { ok: true, action: 'updated' };
+    }
+    await channel.send({ embeds: [embed] });
+    return { ok: true, action: 'sent' };
+  } catch (err) {
+    return { ok: false, reason: 'send_error', error: err };
+  }
+}
+
 // ---- module export ----
 
 module.exports = function (client, adminIds) {
+  // Tu dong dang/cap nhat bang luat NGAY KHI BOT ONLINE - khong can cho
+  // admin go lenh /rules nua. Lenh /rules van giu lai o duoi de lam moi
+  // thu cong bat cu luc nao (vd sau khi sua noi dung RULES ma khong muon
+  // restart lai bot).
+  client.once('ready', async () => {
+    const result = await postOrUpdateRules(client);
+    if (result.ok) {
+      console.log(`[rules.js] Da tu dong ${result.action === 'updated' ? 'cap nhat' : 'dang'} bang luat khi bot online.`);
+    } else {
+      console.error(`[rules.js] Khong the tu dong dang bang luat (ly do: ${result.reason}).`);
+    }
+  });
+
   client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
     if (interaction.commandName !== 'rules') return;
@@ -116,36 +167,23 @@ module.exports = function (client, adminIds) {
       return interaction.reply({ content: 'Bạn không có quyền sử dụng lệnh này!', ephemeral: true }).catch(() => {});
     }
 
-    // Kiem tra ID kenh co dung DANG (chi gom so, du dai cua 1 Discord
-    // snowflake ID) thay vi so sanh voi 1 chuoi placeholder cu the - vi
-    // neu ai do thay ID that vao ma lo thay luon ca cho so sanh (dung
-    // 1 lenh find-replace toan bo file) thi kieu so sanh cu se luon
-    // luon dung y het gia tri that, khien lenh tuong nhu "chua cau hinh"
-    // mai mai du da dien dung ID that roi.
-    if (!RULES_CHANNEL_ID || !/^\d{5,25}$/.test(RULES_CHANNEL_ID)) {
-      return interaction.reply({ content: 'RULES_CHANNEL_ID trong rules.js không hợp lệ (phải là ID kênh dạng số)!', ephemeral: true }).catch(() => {});
-    }
-
-    const channel = interaction.guild.channels.cache.get(RULES_CHANNEL_ID);
-    if (!channel) {
-      return interaction.reply({ content: 'Không tìm thấy kênh Rules trong server này. Kiểm tra lại RULES_CHANNEL_ID!', ephemeral: true }).catch(() => {});
-    }
-
     await interaction.deferReply({ ephemeral: true }).catch(() => {});
 
-    const embed = buildRulesEmbed();
+    const result = await postOrUpdateRules(client);
 
-    try {
-      const oldMsg = await findOldRulesMessage(channel, client);
-      if (oldMsg) {
-        await oldMsg.edit({ embeds: [embed] });
-        return interaction.editReply({ content: `Đã cập nhật bảng luật trong <#${RULES_CHANNEL_ID}>.` }).catch(() => {});
-      }
-      await channel.send({ embeds: [embed] });
-      return interaction.editReply({ content: `Đã đăng bảng luật vào <#${RULES_CHANNEL_ID}>.` }).catch(() => {});
-    } catch (err) {
-      console.error('Lỗi đăng bảng luật:', err.message);
-      return interaction.editReply({ content: `Lỗi khi đăng bảng luật: ${err.message}` }).catch(() => {});
+    if (!result.ok) {
+      const messages = {
+        invalid_id: 'RULES_CHANNEL_ID trong rules.js không hợp lệ (phải là ID kênh dạng số)!',
+        channel_not_found: 'Không tìm thấy kênh Rules trong server này. Kiểm tra lại RULES_CHANNEL_ID!',
+        send_error: `Lỗi khi đăng bảng luật: ${result.error ? result.error.message : 'không rõ nguyên nhân'}`,
+      };
+      return interaction.editReply({ content: messages[result.reason] || 'Có lỗi xảy ra.' }).catch(() => {});
     }
+
+    return interaction.editReply({
+      content: result.action === 'updated'
+        ? `Đã cập nhật bảng luật trong <#${RULES_CHANNEL_ID}>.`
+        : `Đã đăng bảng luật vào <#${RULES_CHANNEL_ID}>.`,
+    }).catch(() => {});
   });
 };

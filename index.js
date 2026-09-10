@@ -456,11 +456,11 @@ client.once("ready", async () => {
         sub.setName("add")
           .setDescription("Them vao blacklist")
           .addStringOption(o => o.setName("lydo").setDescription("Ly do blacklist").setRequired(true))
+          .addAttachmentOption(o => o.setName("proof").setDescription("Anh bang chung (bat buoc)").setRequired(true))
           .addUserOption(o => o.setName("nguoi").setDescription("Nguoi bi blacklist (neu co Discord)").setRequired(false))
           .addStringOption(o => o.setName("ten").setDescription("Ten (neu khong co Discord)").setRequired(false))
           .addStringOption(o => o.setName("thoihan").setDescription("Thoi han (mac dinh: Permanent)").setRequired(false))
           .addStringOption(o => o.setName("thoigian").setDescription("Ngay/gio tuy ban ghi (tuy chon)").setRequired(false))
-          .addAttachmentOption(o => o.setName("proof").setDescription("Anh bang chung (bat buoc)").setRequired(true))
       )
       .addSubcommand(sub =>
         sub.setName("remove")
@@ -698,10 +698,7 @@ client.on("messageCreate", async (message) => {
   }
 
   // 3. HỆ THỐNG QUÉT TỪ CẤM
-  const contentLower = message.content.toLowerCase();
-  const hasBannedWord = bannedWords.some(word => contentLower.includes(word));
-
-  if (hasBannedWord && !OWNER_ID.includes(userId) && !WHITELIST.includes(userId)) {
+  if (containsBannedWord(message.content) && !OWNER_ID.includes(userId) && !WHITELIST.includes(userId)) {
     let violators = {};
     try { violators = JSON.parse(fs.readFileSync(VIOLATION_FILE, 'utf8')); } catch { violators = {}; }
 
