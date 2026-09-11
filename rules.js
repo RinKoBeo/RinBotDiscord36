@@ -1,5 +1,5 @@
 // rules.js - Dang va cap nhat bang Luat (Rules) vao kenh co dinh
-// Banner o dau tien, tat ca cac rule gom trong cung 1 tin nhan (khong dung emoji)
+// Banner va tat ca noi dung luat gom chung trong duy nhat 1 embed (khong tach rieng le, khong dung emoji)
 
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
 
@@ -67,25 +67,17 @@ const RULES = [
   },
 ];
 
-// Embed Banner (hien thi tren cung)
-function buildBannerEmbed() {
-  if (!RULES_BANNER_URL || !/^https?:\/\//i.test(RULES_BANNER_URL)) return null;
-  return new EmbedBuilder()
-    .setColor(0x8b0000)
-    .setImage(RULES_BANNER_URL);
-}
-
-// Embed chua toan bo noi dung luat
+// Tao duy nhat 1 Embed chua toan bo bang luat va banner
 function buildRulesEmbed() {
   let description = 'Luật Discord giúp tạo ra môi trường cộng đồng an toàn, tôn trọng và có trật tự. Vui lòng đọc kỹ và tuân thủ các quy định dưới đây:\n\n';
 
   for (let i = 0; i < RULES.length; i++) {
-    description += `# ---------- RULE ${i + 1} ----------\n`;
+    description += `## ---------- RULE ${i + 1} ----------\n`;
     description += `### ${RULES[i].title}\n`;
     description += `${RULES[i].desc}\n`;
   }
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setTitle(RULES_TITLE)
     .setColor(0x8b0000)
     .setDescription(description.trim())
@@ -93,18 +85,15 @@ function buildRulesEmbed() {
       text: 'Vi phạm luật có thể dẫn đến cảnh cáo (warn), timeout, kick hoặc ban tuỳ mức độ, theo quyết định của Ban Quản Trị.',
     })
     .setTimestamp();
+
+  if (RULES_BANNER_URL && /^https?:\/\//i.test(RULES_BANNER_URL)) {
+    embed.setImage(RULES_BANNER_URL);
+  }
+
+  return embed;
 }
 
-// Danh sach embeds gui trong 1 tin nhan duy nhat (Banner tren cung, Rules ben duoi)
-function buildEmbeds() {
-  const embeds = [];
-  const bannerEmbed = buildBannerEmbed();
-  if (bannerEmbed) embeds.push(bannerEmbed);
-  embeds.push(buildRulesEmbed());
-  return embeds;
-}
-
-// Dang hoac cap nhat bang luat
+// Dang hoac cap nhat bang luat (chi dung 1 tin nhan chua duy nhat 1 embed)
 async function postOrUpdateRules(client) {
   if (!RULES_CHANNEL_ID || !/^\d{5,25}$/.test(RULES_CHANNEL_ID)) {
     return { ok: false, reason: 'invalid_id' };
@@ -115,16 +104,16 @@ async function postOrUpdateRules(client) {
     return { ok: false, reason: 'channel_not_found' };
   }
 
-  const embeds = buildEmbeds();
+  const rulesEmbed = buildRulesEmbed();
 
   try {
     const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
     if (messages) {
       const ownMessages = [...messages.filter((m) => m.author.id === client.user.id).values()];
 
-      // Neu da co dung 1 tin nhan cu cua bot, chi can edit lai embeds
+      // Neu da co dung 1 tin nhan cu cua bot, chi can edit lai embed
       if (ownMessages.length === 1) {
-        await ownMessages[0].edit({ content: null, embeds });
+        await ownMessages[0].edit({ content: null, embeds: [rulesEmbed] });
         return { ok: true, action: 'edited' };
       }
 
@@ -134,7 +123,7 @@ async function postOrUpdateRules(client) {
       }
     }
 
-    await channel.send({ embeds });
+    await channel.send({ embeds: [rulesEmbed] });
     return { ok: true, action: 'sent' };
   } catch (err) {
     return { ok: false, reason: 'send_error', error: err };
