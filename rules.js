@@ -8,7 +8,7 @@ const { EmbedBuilder, PermissionsBitField } = require('discord.js');
 // ============================================================
 const RULES_CHANNEL_ID = process.env.RULES_CHANNEL_ID || '1526993782967631883';
 const RULES_BANNER_URL = process.env.RULES_BANNER_URL || 'https://raw.githubusercontent.com/RinKoBeo/RinBotDiscord36/main/vfb.jfif';
-const RULES_TITLE = '# VanGurd of Liberty - Luật Discord (Rules)';
+const RULES_TITLE = 'VanGuard of Liberty - Luật Discord (Rules)';
 // ============================================================
 
 // Danh sach 13 dieu luat
@@ -69,7 +69,8 @@ const RULES = [
 
 // Tao duy nhat 1 Embed chua toan bo bang luat va banner
 function buildRulesEmbed() {
-  let description = 'Luật Discord giúp tạo ra môi trường cộng đồng an toàn, tôn trọng và có trật tự. Vui lòng đọc kỹ và tuân thủ các quy định dưới đây:\n\n';
+  let description = `# ${RULES_TITLE}\n\n`;
+  description += 'Luật Discord giúp tạo ra môi trường cộng đồng an toàn, tôn trọng và có trật tự. Vui lòng đọc kỹ và tuân thủ các quy định dưới đây:\n\n';
 
   for (let i = 0; i < RULES.length; i++) {
     description += `## ---------- RULE ${i + 1} ----------\n`;
@@ -78,7 +79,6 @@ function buildRulesEmbed() {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle(RULES_TITLE)
     .setColor(0x8b0000)
     .setDescription(description.trim())
     .setFooter({
