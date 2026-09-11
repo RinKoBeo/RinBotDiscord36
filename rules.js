@@ -8,7 +8,7 @@ const { EmbedBuilder, PermissionsBitField } = require('discord.js');
 // ============================================================
 const RULES_CHANNEL_ID = process.env.RULES_CHANNEL_ID || '1526993782967631883';
 const RULES_BANNER_URL = process.env.RULES_BANNER_URL || 'https://raw.githubusercontent.com/RinKoBeo/RinBotDiscord36/main/vfb.jfif';
-const RULES_TITLE = 'VanGurd of Liberty - Luật Discord (Rules)';
+const RULES_TITLE = '# VanGurd of Liberty - Luật Discord (Rules)';
 // ============================================================
 
 // Danh sach 13 dieu luat
