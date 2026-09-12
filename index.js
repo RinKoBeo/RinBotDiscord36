@@ -634,8 +634,19 @@ console.log(`Da load ${bannedWords.length} tu cam (bao gom bien the leetspeak)`)
 
 // Bo URL ra khoi noi dung truoc khi quet tu cam. Tranh truong hop link GIF
 // (vd: klipy.com/gifs/....-edit-3) bi dinh oan vi "dit" nam trong "edit".
+// Bo URL ra khoi noi dung truoc khi quet tu cam. Tranh truong hop link GIF
+// (vd: klipy.com/gifs/....-edit-3) bi dinh oan vi "dit" nam trong "edit".
+//
+// SUA LAI: truoc day chi bat duoc link co "http://" hoac "https://" o dau.
+// Nhung nhieu link dan truc tiep (Discord tu nhan dien thanh clickable)
+// khong co tien to protocol, vd "tenor.com/view/...", "discord.gg/xyz",
+// "klipy.com/gifs/..." - kieu nay truoc day KHONG bi bot loai bo, nen
+// phan domain/duong dan van bi quet chu cam nhu thuong, de dinh oan.
+// Gio bat them ca dang "domain.tld/duong-dan" khong co protocol.
 function stripUrls(text) {
-  return text.replace(/https?:\/\/\S+/gi, ' ');
+  let cleaned = text.replace(/https?:\/\/\S+/gi, ' ');
+  cleaned = cleaned.replace(/\b(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?\b/gi, ' ');
+  return cleaned;
 }
 
 // Escape ky tu dac biet de dung an toan trong RegExp
