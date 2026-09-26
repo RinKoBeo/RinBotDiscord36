@@ -536,33 +536,30 @@ client.once("ready", async () => {
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-  // Dang ky lenh GUILD (tuc thi) cho TAT CA cac server bot dang co mat,
-  // thay vi chi 1 server co dinh -> them bot vao server moi la co lenh
-  // ngay, khong can sua code moi lan.
-  if (client.guilds.cache.size === 0) {
-    console.log("Bot chua o trong server nao ca, khong co gi de dang ky lenh.");
-  } else {
-    for (const guild of client.guilds.cache.values()) {
-      try {
-        await rest.put(
-          Routes.applicationGuildCommands(client.user.id, guild.id),
-          { body: commands }
-        );
-        console.log(`Da dang ky lenh cho server: ${guild.name}`);
-      } catch (err) {
-        console.error(`Loi dang ky lenh cho server ${guild.name}:`, err.message);
-      }
-    }
+  // Dang ky lenh GLOBAL - tu dong hoat dong tren MOI server bot tham gia
+  // (ke ca server moi join sau nay, khong can restart bot)
+  // Luu y: lenh global mat khoang 1 gio de cap nhat lan dau tren Discord
+  try {
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands }
+    );
+    console.log("Da dang ky lenh GLOBAL cho tat ca server.");
+  } catch (err) {
+    console.error("Loi dang ky lenh global:", err.message);
   }
 
-  // Xoa sach bo lenh GLOBAL cu (neu con sot lai tu truoc), tranh bi hien trung
-  // voi bo lenh GUILD moi vua dang ky o tren
-  await rest.put(
-    Routes.applicationCommands(client.user.id),
-    { body: [] }
-  ).catch(err => console.error("Loi xoa lenh global cu:", err.message));
+  // Xoa sach lenh GUILD cu (neu con sot lai tu truoc) de tranh bi trung voi lenh global
+  for (const guild of client.guilds.cache.values()) {
+    try {
+      await rest.put(
+        Routes.applicationGuildCommands(client.user.id, guild.id),
+        { body: [] }
+      );
+    } catch {}
+  }
 
-  console.log("Slash command loaded");
+  console.log("Slash command loaded (Global)");
 
   // Dam bao ca 5 bang TOP deu co san tin nhan trong kenh rieng cua no ngay tu luc bot online
   await initAllTopBoards(client);

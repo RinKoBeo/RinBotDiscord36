@@ -262,7 +262,7 @@ module.exports = (client) => {
               }
             : { name: '\u200B', value: '\u200B', inline: false }
         )
-        .setFooter({ text: '+10 XP mỗi tin nhắn (cooldown 30 giây)' })
+        .setFooter({ text: '+10 XP mỗi tin nhắn (cooldown 5 giây)' })
         .setTimestamp();
 
       return interaction.reply({ embeds: [embedRank] }).catch(() => {});
